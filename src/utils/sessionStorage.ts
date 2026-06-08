@@ -861,6 +861,26 @@ class Project {
   }
 
   /**
+   * Cleanup all pending state. Used during teardown (e.g. before-quit).
+   * Flushes queued writes and clears pending buffers so nothing leaks.
+   */
+  cleanup(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer)
+      this.flushTimer = null
+    }
+    for (const [, queue] of this.writeQueues) {
+      for (const { resolve } of queue) {
+        try { resolve() } catch {}
+      }
+    }
+    this.writeQueues.clear()
+    this.pendingEntries = []
+    this.activeDrain = null
+    this.flushResolvers = []
+  }
+
+  /**
    * Remove a message from the transcript by UUID.
    * Used for tombstoning orphaned messages from failed streaming attempts.
    *

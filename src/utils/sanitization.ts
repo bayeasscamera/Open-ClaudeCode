@@ -89,3 +89,99 @@ export function recursivelySanitizeUnicode(value: unknown): unknown {
   // Return other primitive values (numbers, booleans, null, undefined) unchanged
   return value
 }
+
+// ---------------------------------------------------------------------------
+// Input guards for size limits and null-byte stripping
+// ---------------------------------------------------------------------------
+
+import { logError } from './log.js'
+
+/** Max characters in a single message content string. */
+export const MAX_MESSAGE_LENGTH = 50_000
+/** Max bytes to read from a file in one shot. */
+export const MAX_FILE_READ_BYTES = 50 * 1024 * 1024
+/** Max items in an array before truncation. */
+export const MAX_ARRAY_LENGTH = 100_000
+/** Max characters in any generic string. */
+export const MAX_STRING_LENGTH = 100_000
+/** Hard cap for mutableMessages store to prevent unbounded growth. */
+export const HARD_MAX_MESSAGES = 10_000
+
+/**
+ * Sanitize a string by trimming, stripping null bytes, and clamping length.
+ */
+export function sanitizeString(
+  input: unknown,
+  maxLength: number = MAX_STRING_LENGTH,
+): string {
+  if (input === null || input === undefined) return ''
+  let text = String(input)
+  text = text.replace(/\x00/g, '')
+  text = text.trim()
+  if (text.length > maxLength) text = text.slice(0, maxLength)
+  return text
+}
+
+/**
+ * Sanitize an array by capping its length.
+ */
+export function sanitizeArray<T>(
+  arr: T[],
+  maxLength: number = MAX_ARRAY_LENGTH,
+): T[] {
+  if (!Array.isArray(arr)) return []
+  return arr.length <= maxLength ? arr : arr.slice(0, maxLength)
+}
+
+/**
+ * Safe array push that caps the array size.
+ */
+export function guardArrayPush<T>(
+  arr: T[],
+  item: T,
+  maxLength: number = HARD_MAX_MESSAGES,
+): T[] {
+  arr.push(item)
+  if (arr.length > maxLength) {
+    arr.splice(0, arr.length - maxLength)
+  }
+  return arr
+}
+
+/**
+ * Error thrown when a value exceeds a defined limit.
+ */
+export class LimitExceededError extends Error {
+  constructor(
+    public readonly valueName: string,
+    public readonly value: number,
+    public readonly limit: number,
+  ) {
+    super(`${valueName} exceeds limit: ${value} > ${limit}`)
+    this.name = 'LimitExceededError'
+  }
+}
+
+/**
+ * Validate that a value is within bounds, log and cap if exceeded.
+ */
+export function guardNumeric(
+  value: number,
+  limit: number,
+  name: string,
+): number {
+  if (!Number.isFinite(value) || value < 0) return 0
+  if (value > limit) {
+    logError(new LimitExceededError(name, value, limit))
+    return limit
+  }
+  return value
+}
+
+/**
+ * Clamp a numeric value to [0, limit].
+ */
+export function clampLimit(value: number, limit: number): number {
+  if (!Number.isFinite(value)) return 0
+  return Math.min(Math.max(0, value), limit)
+}

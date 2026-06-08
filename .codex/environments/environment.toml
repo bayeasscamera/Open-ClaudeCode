@@ -1,0 +1,3 @@
+[actions.Run]
+command = "./script/build_and_run.sh --verify"
+description = "Build, install, and launch OPC.app"

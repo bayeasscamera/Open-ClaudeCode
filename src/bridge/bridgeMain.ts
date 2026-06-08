@@ -16,7 +16,6 @@ import { logForDebugging } from '../utils/debug.js'
 import { logForDiagnosticsNoPII } from '../utils/diagLogs.js'
 import { isEnvTruthy, isInProtectedNamespace } from '../utils/envUtils.js'
 import { errorMessage } from '../utils/errors.js'
-import { truncateToWidth } from '../utils/format.js'
 import { logError } from '../utils/log.js'
 import { sleep } from '../utils/sleep.js'
 import { createAgentWorktree, removeAgentWorktree } from '../utils/worktree.js'
@@ -47,6 +46,8 @@ import {
   type SessionSpawner,
   type SessionSpawnOpts,
   type SpawnMode,
+  type WorkResponse,
+  type WorkSecret,
 } from './types.js'
 import {
   buildCCRv2SdkUrl,
@@ -55,6 +56,64 @@ import {
   registerWorker,
   sameSessionId,
 } from './workSecret.js'
+import { parseArgs } from './bridgeArgs.js'
+import { isConnectionError, isServerError } from './bridgeErrors.js'
+import {
+  classifyHeartbeatFatalErrorStatus,
+  isHeartbeatAuthFailureStatus,
+  resolveHeartbeatResult,
+  type HeartbeatResult,
+} from './bridgeHeartbeat.js'
+import {
+  nextBackoffMs,
+  pollSleepDetectionThresholdMs,
+  shouldResetPollErrorBudget,
+} from './bridgePollBackoff.js'
+import { addJitter, formatDelay } from './bridgeRetry.js'
+import {
+  normalizeSessionDoneStatus,
+  sessionLifecycleAction,
+  shouldLogSessionFailure,
+  shouldStopWorkAfterSessionDone,
+} from './bridgeSessionLifecycle.js'
+import {
+  buildSessionActivityTrail,
+  shouldKeepCurrentSessionStatus,
+} from './bridgeSessionStatus.js'
+import {
+  createFirstUserMessageTitleHandler,
+  fetchAndApplySessionTitle,
+} from './bridgeSessionTitle.js'
+import {
+  stopWorkWithRetry,
+  type StopWorkRetryDeps,
+} from './bridgeStopWork.js'
+import {
+  captureSpawnModeForSession,
+  sessionDebugFilePath,
+  sessionWorktreeName,
+  shouldCreateSessionWorktree,
+  shouldUseCcrV2Session,
+} from './bridgeSessionSpawn.js'
+
+export {
+  parseArgs,
+  parseCapacityValue,
+  parseSpawnValue,
+  type ParsedArgs,
+} from './bridgeArgs.js'
+export { isConnectionError, isServerError } from './bridgeErrors.js'
+
+const stopWorkRetryDeps: StopWorkRetryDeps = {
+  logForDebugging,
+  logForDiagnosticsNoPII,
+  errorMessage,
+  sleep,
+}
+
+// ============================================================================
+// SECTION: TYPES & CONFIG — BackoffConfig, constants
+// ============================================================================
 
 export type BackoffConfig = {
   connInitialMs: number
@@ -98,17 +157,6 @@ async function isMultiSessionSpawnEnabled(): Promise<boolean> {
 }
 
 /**
- * Returns the threshold for detecting system sleep/wake in the poll loop.
- * Must exceed the max backoff cap — otherwise normal backoff delays trigger
- * false sleep detection (resetting the error budget indefinitely). Using
- * 2× the connection backoff cap, matching the pattern in WebSocketTransport
- * and replBridge.
- */
-function pollSleepDetectionThresholdMs(backoff: BackoffConfig): number {
-  return backoff.connCapMs * 2
-}
-
-/**
  * Returns the args that must precede CLI flags when spawning a child claude
  * process. In compiled binaries, process.execPath is the claude binary itself
  * and args go directly to it. In npm installs (node running cli.js),
@@ -137,6 +185,10 @@ function safeSpawn(
     return errMsg
   }
 }
+
+// ============================================================================
+// SECTION: BRIDGE LOOP — runBridgeLoop, connection management
+// ============================================================================
 
 export async function runBridgeLoop(
   config: BridgeConfig,
@@ -199,9 +251,7 @@ export async function runBridgeLoop(
    * got a 401/403 (JWT expired — re-queued via reconnectSession so the next
    * poll delivers fresh work), or 'failed' if all failed for other reasons.
    */
-  async function heartbeatActiveWorkItems(): Promise<
-    'ok' | 'auth_failed' | 'fatal' | 'failed'
-  > {
+  async function heartbeatActiveWorkItems(): Promise<HeartbeatResult> {
     let anySuccess = false
     let anyFatal = false
     const authFailedSessions: string[] = []
@@ -219,14 +269,14 @@ export async function runBridgeLoop(
           `[bridge:heartbeat] Failed for sessionId=${sessionId} workId=${workId}: ${errorMessage(err)}`,
         )
         if (err instanceof BridgeFatalError) {
+          const errorType = classifyHeartbeatFatalErrorStatus(err.status)
           logEvent('tengu_bridge_heartbeat_error', {
             status:
               err.status as unknown as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            error_type: (err.status === 401 || err.status === 403
-              ? 'auth_failed'
-              : 'fatal') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+            error_type:
+              errorType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           })
-          if (err.status === 401 || err.status === 403) {
+          if (isHeartbeatAuthFailureStatus(err.status)) {
             authFailedSessions.push(sessionId)
           } else {
             // 404/410 = environment expired or deleted — no point retrying
@@ -260,13 +310,11 @@ export async function runBridgeLoop(
         )
       }
     }
-    if (anyFatal) {
-      return 'fatal'
-    }
-    if (authFailedSessions.length > 0) {
-      return 'auth_failed'
-    }
-    return anySuccess ? 'ok' : 'failed'
+    return resolveHeartbeatResult({
+      anySuccess,
+      anyFatal,
+      authFailedCount: authFailedSessions.length,
+    })
   }
 
   // Sessions spawned with CCR v2 env vars. v2 children cannot use OAuth
@@ -319,6 +367,207 @@ export async function runBridgeLoop(
     pendingCleanups.add(p)
     void p.finally(() => pendingCleanups.delete(p))
   }
+
+  function markWorkCompletedAndStop(workId: string): void {
+    completedWorkIds.add(workId)
+    trackCleanup(
+      stopWorkWithRetry(
+        api,
+        environmentId,
+        workId,
+        logger,
+        backoffConfig.stopWorkBaseDelayMs,
+        stopWorkRetryDeps,
+      ),
+    )
+  }
+
+  function cleanupSessionWorktree(sessionId: string): void {
+    const wt = sessionWorktrees.get(sessionId)
+    if (!wt) {
+      return
+    }
+    sessionWorktrees.delete(sessionId)
+    trackCleanup(
+      removeAgentWorktree(
+        wt.worktreePath,
+        wt.worktreeBranch,
+        wt.gitRoot,
+        wt.hookBased,
+      ).catch((err: unknown) =>
+        logger.logVerbose(
+          `Failed to remove worktree ${wt.worktreePath}: ${errorMessage(err)}`,
+        ),
+      ),
+    )
+  }
+
+  async function sleepAfterCapacityPoll(
+    pollConfig: ReturnType<typeof getPollIntervalConfig>,
+  ): Promise<void> {
+    const cap = capacityWake.signal()
+    if (pollConfig.non_exclusive_heartbeat_interval_ms > 0) {
+      await heartbeatActiveWorkItems()
+      await sleep(pollConfig.non_exclusive_heartbeat_interval_ms, cap.signal)
+    } else if (pollConfig.multisession_poll_interval_ms_at_capacity > 0) {
+      await sleep(
+        pollConfig.multisession_poll_interval_ms_at_capacity,
+        cap.signal,
+      )
+    }
+    cap.cleanup()
+  }
+
+  async function registerCcrV2WorkerWithRetry(
+    sessionId: string,
+    sdkUrl: string,
+    sessionIngressToken: string,
+  ): Promise<
+    | { ok: true; workerEpoch: number }
+    | { ok: false; permanentFailure: boolean }
+  > {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const workerEpoch = await registerWorker(sdkUrl, sessionIngressToken)
+        logForDebugging(
+          `[bridge:session] CCR v2: registered worker sessionId=${sessionId} epoch=${workerEpoch} attempt=${attempt}`,
+        )
+        return { ok: true, workerEpoch }
+      } catch (err) {
+        const errMsg = errorMessage(err)
+        if (attempt < 2) {
+          logForDebugging(
+            `[bridge:session] CCR v2: registerWorker attempt ${attempt} failed, retrying: ${errMsg}`,
+          )
+          await sleep(2_000, loopSignal)
+          if (loopSignal.aborted) break
+          continue
+        }
+        logger.logError(
+          `CCR v2 worker registration failed for session ${sessionId}: ${errMsg}`,
+        )
+        logError(new Error(`registerWorker failed: ${errMsg}`))
+        return { ok: false, permanentFailure: true }
+      }
+    }
+    return { ok: false, permanentFailure: false }
+  }
+
+  function refreshExistingSessionWork(input: {
+    sessionId: string
+    workId: string
+    sessionIngressToken: string
+    handle: SessionHandle
+  }): void {
+    input.handle.updateAccessToken(input.sessionIngressToken)
+    sessionIngressTokens.set(input.sessionId, input.sessionIngressToken)
+    sessionWorkIds.set(input.sessionId, input.workId)
+    // Re-schedule next refresh from the fresh JWT's expiry. onRefresh
+    // branches on v2Sessions so both v1 and v2 are safe here.
+    tokenRefresh?.schedule(input.sessionId, input.sessionIngressToken)
+    logForDebugging(
+      `[bridge:work] Updated access token for existing sessionId=${input.sessionId} workId=${input.workId}`,
+    )
+  }
+
+  function registerSpawnedSession(input: {
+    sessionId: string
+    workId: string
+    sessionIngressToken: string
+    compatSessionId: string
+    handle: SessionHandle
+  }): number {
+    activeSessions.set(input.sessionId, input.handle)
+    sessionWorkIds.set(input.sessionId, input.workId)
+    sessionIngressTokens.set(input.sessionId, input.sessionIngressToken)
+    sessionCompatIds.set(input.sessionId, input.compatSessionId)
+
+    const startTime = Date.now()
+    sessionStartTimes.set(input.sessionId, startTime)
+    return startTime
+  }
+
+  async function updateSessionTitle(
+    sessionId: string,
+    title: string,
+    options: { baseUrl: string },
+  ): Promise<unknown> {
+    const { updateBridgeSessionTitle } = await import('./createSession.js')
+    return updateBridgeSessionTitle(sessionId, title, options)
+  }
+
+  function attachSpawnedSession(input: {
+    sessionId: string
+    compatSessionId: string
+    handle: SessionHandle
+    startTime: number
+    sessionIngressToken: string
+    useCcrV2: boolean
+  }): void {
+    // Use a generic prompt description since we no longer get startup_context
+    logger.logSessionStart(input.sessionId, `Session ${input.sessionId}`)
+
+    const sessionDebugFile = sessionDebugFilePath({
+      sessionId: input.sessionId,
+      debugFile: config.debugFile,
+      verbose: config.verbose,
+      userType: process.env.USER_TYPE,
+      tmpDir: tmpdir(),
+    })
+
+    if (sessionDebugFile) {
+      logger.logVerbose(`Debug log: ${sessionDebugFile}`)
+    }
+
+    // Register in the sessions Map before starting status updates so the
+    // first render tick shows the correct count and bullet list in sync.
+    logger.addSession(
+      input.compatSessionId,
+      getRemoteSessionUrl(input.compatSessionId, config.sessionIngressUrl),
+    )
+
+    // Start live status updates and transition to "Attached" state.
+    startStatusUpdates()
+    logger.setAttached(input.compatSessionId)
+    fetchAndApplySessionTitle({
+      sessionId: input.sessionId,
+      compatSessionId: input.compatSessionId,
+      activeSessions,
+      titledSessions,
+      logger,
+      baseUrl: config.apiBaseUrl,
+      fetchSessionTitle,
+      logForDebugging,
+    })
+
+    // Start per-session timeout watchdog
+    const timeoutMs = config.sessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS
+    if (timeoutMs > 0) {
+      const timer = setTimeout(
+        onSessionTimeout,
+        timeoutMs,
+        input.sessionId,
+        timeoutMs,
+        logger,
+        timedOutSessions,
+        input.handle,
+      )
+      sessionTimers.set(input.sessionId, timer)
+    }
+
+    // Schedule proactive token refresh before the JWT expires.
+    // onRefresh branches on v2Sessions: v1 delivers OAuth to the
+    // child, v2 triggers server re-dispatch via reconnectSession.
+    if (input.useCcrV2) {
+      v2Sessions.add(input.sessionId)
+    }
+    tokenRefresh?.schedule(input.sessionId, input.sessionIngressToken)
+
+    void input.handle.done.then(
+      onSessionDone(input.sessionId, input.startTime, input.handle),
+    )
+  }
+
   let connBackoff = 0
   let generalBackoff = 0
   let connErrorStart: number | null = null
@@ -401,7 +650,7 @@ export async function runBridgeLoop(
     if (!startTime) return
 
     const activity = handle.currentActivity
-    if (!activity || activity.type === 'result' || activity.type === 'error') {
+    if (shouldKeepCurrentSessionStatus(activity)) {
       // Session is between turns — keep current status (Attached/titled).
       // In multi-session mode, still refresh so bullet-list activities stay current.
       if (config.maxSessions > 1) logger.refreshDisplay()
@@ -411,10 +660,7 @@ export async function runBridgeLoop(
     const elapsed = formatDuration(Date.now() - startTime)
 
     // Build trail from recent tool activities (last 5)
-    const trail = handle.activities
-      .filter(a => a.type === 'tool_start')
-      .slice(-5)
-      .map(a => a.summary)
+    const trail = buildSessionActivityTrail(handle.activities)
 
     logger.updateSessionStatus(sessionId, elapsed, activity, trail)
   }
@@ -470,8 +716,7 @@ export async function runBridgeLoop(
       // failed session (not a server/shutdown interrupt) so we still call
       // stopWork and archiveSession below.
       const wasTimedOut = timedOutSessions.delete(sessionId)
-      const status: SessionDoneStatus =
-        wasTimedOut && rawStatus === 'interrupted' ? 'failed' : rawStatus
+      const status = normalizeSessionDoneStatus(rawStatus, wasTimedOut)
       const durationMs = Date.now() - startTime
 
       logForDebugging(
@@ -505,7 +750,13 @@ export async function runBridgeLoop(
           // killed, which is expected and not a real failure.
           // Also skip for timeout-killed sessions — the timeout watchdog
           // already logged a clear timeout message.
-          if (!wasTimedOut && !loopSignal.aborted) {
+          if (
+            shouldLogSessionFailure({
+              status,
+              wasTimedOut,
+              loopAborted: loopSignal.aborted,
+            })
+          ) {
             failureMessage = stderrSummary ?? 'Process exited with error'
             logger.logSessionFailed(sessionId, failureMessage)
             logError(new Error(`Bridge session failed: ${failureMessage}`))
@@ -519,75 +770,257 @@ export async function runBridgeLoop(
       // Notify the server that this work item is done. Skip for interrupted
       // sessions — interrupts are either server-initiated (the server already
       // knows) or caused by bridge shutdown (which calls stopWork() separately).
-      if (status !== 'interrupted' && workId) {
-        trackCleanup(
-          stopWorkWithRetry(
-            api,
-            environmentId,
-            workId,
-            logger,
-            backoffConfig.stopWorkBaseDelayMs,
-          ),
-        )
-        completedWorkIds.add(workId)
+      if (
+        shouldStopWorkAfterSessionDone({
+          status,
+          hasWorkId: Boolean(workId),
+        }) &&
+        workId
+      ) {
+        markWorkCompletedAndStop(workId)
       }
 
       // Clean up worktree if one was created for this session
-      const wt = sessionWorktrees.get(sessionId)
-      if (wt) {
-        sessionWorktrees.delete(sessionId)
-        trackCleanup(
-          removeAgentWorktree(
-            wt.worktreePath,
-            wt.worktreeBranch,
-            wt.gitRoot,
-            wt.hookBased,
-          ).catch((err: unknown) =>
-            logger.logVerbose(
-              `Failed to remove worktree ${wt.worktreePath}: ${errorMessage(err)}`,
-            ),
-          ),
-        )
-      }
+      cleanupSessionWorktree(sessionId)
 
       // Lifecycle decision: in multi-session mode, keep the bridge running
       // after a session completes. In single-session mode, abort the poll
       // loop so the bridge exits cleanly.
-      if (status !== 'interrupted' && !loopSignal.aborted) {
-        if (config.spawnMode !== 'single-session') {
-          // Multi-session: archive the completed session so it doesn't linger
-          // as stale in the web UI. archiveSession is idempotent (409 if already
-          // archived), so double-archiving at shutdown is safe.
-          // sessionId arrived as cse_* from the work poll (infrastructure-layer
-          // tag). archiveSession hits /v1/sessions/{id}/archive which is the
-          // compat surface and validates TagSession (session_*). Re-tag — same
-          // UUID underneath.
-          trackCleanup(
-            api
-              .archiveSession(compatId)
-              .catch((err: unknown) =>
-                logger.logVerbose(
-                  `Failed to archive session ${sessionId}: ${errorMessage(err)}`,
-                ),
+      const lifecycleAction = sessionLifecycleAction({
+        status,
+        loopAborted: loopSignal.aborted,
+        spawnMode: config.spawnMode,
+      })
+      if (lifecycleAction === 'archive') {
+        // Multi-session: archive the completed session so it doesn't linger
+        // as stale in the web UI. archiveSession is idempotent (409 if already
+        // archived), so double-archiving at shutdown is safe.
+        // sessionId arrived as cse_* from the work poll (infrastructure-layer
+        // tag). archiveSession hits /v1/sessions/{id}/archive which is the
+        // compat surface and validates TagSession (session_*). Re-tag — same
+        // UUID underneath.
+        trackCleanup(
+          api
+            .archiveSession(compatId)
+            .catch((err: unknown) =>
+              logger.logVerbose(
+                `Failed to archive session ${sessionId}: ${errorMessage(err)}`,
               ),
-          )
-          logForDebugging(
-            `[bridge:session] Session ${status}, returning to idle (multi-session mode)`,
-          )
-        } else {
-          // Single-session: coupled lifecycle — tear down environment
-          logForDebugging(
-            `[bridge:session] Session ${status}, aborting poll loop to tear down environment`,
-          )
-          controller.abort()
-          return
-        }
+            ),
+        )
+        logForDebugging(
+          `[bridge:session] Session ${status}, returning to idle (multi-session mode)`,
+        )
+      } else if (lifecycleAction === 'abort') {
+        // Single-session: coupled lifecycle — tear down environment
+        logForDebugging(
+          `[bridge:session] Session ${status}, aborting poll loop to tear down environment`,
+        )
+        controller.abort()
+        return
       }
 
       if (!loopSignal.aborted) {
         startStatusUpdates()
       }
     }
+  }
+
+  async function handleSessionWork(input: {
+    work: WorkResponse
+    secret: WorkSecret
+    ackWork: () => Promise<void>
+  }): Promise<void> {
+    const { work, secret, ackWork } = input
+    const sessionId = work.data.id
+    try {
+      validateBridgeId(sessionId, 'session_id')
+    } catch {
+      await ackWork()
+      logger.logError(`Invalid session_id received: ${sessionId}`)
+      return
+    }
+
+    // If the session is already running, deliver the fresh token so
+    // the child process can reconnect its WebSocket with the new
+    // session ingress token. This handles the case where the server
+    // re-dispatches work for an existing session after the WS drops.
+    const existingHandle = activeSessions.get(sessionId)
+    if (existingHandle) {
+      refreshExistingSessionWork({
+        sessionId,
+        workId: work.id,
+        sessionIngressToken: secret.session_ingress_token,
+        handle: existingHandle,
+      })
+      await ackWork()
+      return
+    }
+
+    // At capacity — token refresh for existing sessions is handled
+    // above, but we cannot spawn new ones. The post-switch capacity
+    // sleep will throttle the loop; just return here.
+    if (activeSessions.size >= config.maxSessions) {
+      logForDebugging(
+        `[bridge:work] At capacity (${activeSessions.size}/${config.maxSessions}), cannot spawn new session for workId=${work.id}`,
+      )
+      return
+    }
+
+    await ackWork()
+    const spawnStartTime = Date.now()
+
+    // CCR v2 path: register this bridge as the session worker, get the
+    // epoch, and point the child at /v1/code/sessions/{id}. The child
+    // already has the full v2 client (SSETransport + CCRClient) — same
+    // code path environment-manager launches in containers.
+    //
+    // v1 path: Session-Ingress WebSocket. Uses config.sessionIngressUrl
+    // (not secret.api_base_url, which may point to a remote proxy tunnel
+    // that doesn't know about locally-created sessions).
+    let sdkUrl: string
+    let useCcrV2 = false
+    let workerEpoch: number | undefined
+    // Server decides per-session via the work secret; env var is the
+    // ant-dev override (e.g. forcing v2 before the server flag is on).
+    if (
+      shouldUseCcrV2Session(
+        secret,
+        isEnvTruthy(process.env.CLAUDE_BRIDGE_USE_CCR_V2),
+      )
+    ) {
+      sdkUrl = buildCCRv2SdkUrl(config.apiBaseUrl, sessionId)
+      const registration = await registerCcrV2WorkerWithRetry(
+        sessionId,
+        sdkUrl,
+        secret.session_ingress_token,
+      )
+      if (registration.ok) {
+        workerEpoch = registration.workerEpoch
+        useCcrV2 = true
+      } else if (registration.permanentFailure) {
+        markWorkCompletedAndStop(work.id)
+      }
+      if (!useCcrV2) return
+    } else {
+      sdkUrl = buildSdkUrl(config.sessionIngressUrl, sessionId)
+    }
+
+    // In worktree mode, on-demand sessions get an isolated git worktree
+    // so concurrent sessions don't interfere with each other's file
+    // changes. The pre-created initial session (if any) runs in
+    // config.dir so the user's first session lands in the directory they
+    // invoked `rc` from — matching the old single-session UX.
+    // In same-dir and single-session modes, all sessions share config.dir.
+    // Capture spawnMode before the await below — the `w` key handler
+    // mutates config.spawnMode directly, and createAgentWorktree can
+    // take 1-2s, so reading config.spawnMode after the await can
+    // produce contradictory analytics (spawn_mode:'same-dir', in_worktree:true).
+    const spawnModeAtDecision = captureSpawnModeForSession(config)
+    let sessionDir = config.dir
+    let worktreeCreateMs = 0
+    if (
+      shouldCreateSessionWorktree({
+        spawnMode: spawnModeAtDecision,
+        sessionId,
+        initialSessionId,
+      })
+    ) {
+      const wtStart = Date.now()
+      try {
+        const wt = await createAgentWorktree(sessionWorktreeName(sessionId))
+        worktreeCreateMs = Date.now() - wtStart
+        sessionWorktrees.set(sessionId, {
+          worktreePath: wt.worktreePath,
+          worktreeBranch: wt.worktreeBranch,
+          gitRoot: wt.gitRoot,
+          hookBased: wt.hookBased,
+        })
+        sessionDir = wt.worktreePath
+        logForDebugging(
+          `[bridge:session] Created worktree for sessionId=${sessionId} at ${wt.worktreePath}`,
+        )
+      } catch (err) {
+        const errMsg = errorMessage(err)
+        logger.logError(
+          `Failed to create worktree for session ${sessionId}: ${errMsg}`,
+        )
+        logError(new Error(`Worktree creation failed: ${errMsg}`))
+        markWorkCompletedAndStop(work.id)
+        return
+      }
+    }
+
+    logForDebugging(
+      `[bridge:session] Spawning sessionId=${sessionId} sdkUrl=${sdkUrl}`,
+    )
+
+    // compat-surface session_* form for logger/Sessions-API calls.
+    // Work poll returns cse_* under v2 compat; convert before spawn so
+    // the onFirstUserMessage callback can close over it.
+    const compatSessionId = toCompatSessionId(sessionId)
+
+    const spawnResult = safeSpawn(
+      spawner,
+      {
+        sessionId,
+        sdkUrl,
+        accessToken: secret.session_ingress_token,
+        useCcrV2,
+        workerEpoch,
+        onFirstUserMessage: createFirstUserMessageTitleHandler({
+          compatSessionId,
+          titledSessions,
+          logger,
+          baseUrl: config.apiBaseUrl,
+          updateBridgeSessionTitle: updateSessionTitle,
+          logForDebugging,
+        }),
+      },
+      sessionDir,
+    )
+    if (typeof spawnResult === 'string') {
+      logger.logError(`Failed to spawn session ${sessionId}: ${spawnResult}`)
+      // Clean up worktree if one was created for this session
+      cleanupSessionWorktree(sessionId)
+      markWorkCompletedAndStop(work.id)
+      return
+    }
+    const handle = spawnResult
+
+    const spawnDurationMs = Date.now() - spawnStartTime
+    logEvent('tengu_bridge_session_started', {
+      active_sessions: activeSessions.size,
+      spawn_mode:
+        spawnModeAtDecision as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      in_worktree: sessionWorktrees.has(sessionId),
+      spawn_duration_ms: spawnDurationMs,
+      worktree_create_ms: worktreeCreateMs,
+      inProtectedNamespace: isInProtectedNamespace(),
+    })
+    logForDiagnosticsNoPII('info', 'bridge_session_started', {
+      spawn_mode: spawnModeAtDecision,
+      in_worktree: sessionWorktrees.has(sessionId),
+      spawn_duration_ms: spawnDurationMs,
+      worktree_create_ms: worktreeCreateMs,
+    })
+
+    const startTime = registerSpawnedSession({
+      sessionId,
+      workId: work.id,
+      sessionIngressToken: secret.session_ingress_token,
+      compatSessionId,
+      handle,
+    })
+
+    attachSpawnedSession({
+      sessionId,
+      compatSessionId,
+      handle,
+      startTime,
+      sessionIngressToken: secret.session_ingress_token,
+      useCcrV2,
+    })
   }
 
   // Start the idle status display immediately — unless we have a pre-created
@@ -656,7 +1089,7 @@ export async function runBridgeLoop(
             // Deadline computed once at entry — GB updates to atCapMs don't
             // shift an in-flight deadline (next entry picks up the new value).
             const pollDeadline = atCapMs > 0 ? Date.now() + atCapMs : null
-            let hbResult: 'ok' | 'auth_failed' | 'fatal' | 'failed' = 'ok'
+            let hbResult: HeartbeatResult = 'ok'
             let hbCycles = 0
             while (
               !loopSignal.aborted &&
@@ -763,20 +1196,7 @@ export async function runBridgeLoop(
         // redeliveries would tight-loop at poll-request speed (the !work
         // branch above is the only sleep, and work != null skips it).
         if (atCapacityBeforeSwitch) {
-          const cap = capacityWake.signal()
-          if (pollConfig.non_exclusive_heartbeat_interval_ms > 0) {
-            await heartbeatActiveWorkItems()
-            await sleep(
-              pollConfig.non_exclusive_heartbeat_interval_ms,
-              cap.signal,
-            )
-          } else if (pollConfig.multisession_poll_interval_ms_at_capacity > 0) {
-            await sleep(
-              pollConfig.multisession_poll_interval_ms_at_capacity,
-              cap.signal,
-            )
-          }
-          cap.cleanup()
+          await sleepAfterCapacityPoll(pollConfig)
         } else {
           await sleep(1000, loopSignal)
         }
@@ -797,34 +1217,12 @@ export async function runBridgeLoop(
         // Can't ack (needs the JWT we failed to decode). stopWork uses OAuth,
         // so it's callable here — prevents XAUTOCLAIM from re-delivering this
         // poisoned item every reclaim_older_than_ms cycle.
-        completedWorkIds.add(work.id)
-        trackCleanup(
-          stopWorkWithRetry(
-            api,
-            environmentId,
-            work.id,
-            logger,
-            backoffConfig.stopWorkBaseDelayMs,
-          ),
-        )
+        markWorkCompletedAndStop(work.id)
         // Respect capacity throttle before retrying — without a sleep here,
         // repeated decode failures at capacity would tight-loop at
         // poll-request speed (work != null skips the !work sleep above).
         if (atCapacityBeforeSwitch) {
-          const cap = capacityWake.signal()
-          if (pollConfig.non_exclusive_heartbeat_interval_ms > 0) {
-            await heartbeatActiveWorkItems()
-            await sleep(
-              pollConfig.non_exclusive_heartbeat_interval_ms,
-              cap.signal,
-            )
-          } else if (pollConfig.multisession_poll_interval_ms_at_capacity > 0) {
-            await sleep(
-              pollConfig.multisession_poll_interval_ms_at_capacity,
-              cap.signal,
-            )
-          }
-          cap.cleanup()
+          await sleepAfterCapacityPoll(pollConfig)
         }
         continue
       }
@@ -857,350 +1255,7 @@ export async function runBridgeLoop(
           logger.logVerbose('Healthcheck received')
           break
         case 'session': {
-          const sessionId = work.data.id
-          try {
-            validateBridgeId(sessionId, 'session_id')
-          } catch {
-            await ackWork()
-            logger.logError(`Invalid session_id received: ${sessionId}`)
-            break
-          }
-
-          // If the session is already running, deliver the fresh token so
-          // the child process can reconnect its WebSocket with the new
-          // session ingress token. This handles the case where the server
-          // re-dispatches work for an existing session after the WS drops.
-          const existingHandle = activeSessions.get(sessionId)
-          if (existingHandle) {
-            existingHandle.updateAccessToken(secret.session_ingress_token)
-            sessionIngressTokens.set(sessionId, secret.session_ingress_token)
-            sessionWorkIds.set(sessionId, work.id)
-            // Re-schedule next refresh from the fresh JWT's expiry. onRefresh
-            // branches on v2Sessions so both v1 and v2 are safe here.
-            tokenRefresh?.schedule(sessionId, secret.session_ingress_token)
-            logForDebugging(
-              `[bridge:work] Updated access token for existing sessionId=${sessionId} workId=${work.id}`,
-            )
-            await ackWork()
-            break
-          }
-
-          // At capacity — token refresh for existing sessions is handled
-          // above, but we cannot spawn new ones. The post-switch capacity
-          // sleep will throttle the loop; just break here.
-          if (activeSessions.size >= config.maxSessions) {
-            logForDebugging(
-              `[bridge:work] At capacity (${activeSessions.size}/${config.maxSessions}), cannot spawn new session for workId=${work.id}`,
-            )
-            break
-          }
-
-          await ackWork()
-          const spawnStartTime = Date.now()
-
-          // CCR v2 path: register this bridge as the session worker, get the
-          // epoch, and point the child at /v1/code/sessions/{id}. The child
-          // already has the full v2 client (SSETransport + CCRClient) — same
-          // code path environment-manager launches in containers.
-          //
-          // v1 path: Session-Ingress WebSocket. Uses config.sessionIngressUrl
-          // (not secret.api_base_url, which may point to a remote proxy tunnel
-          // that doesn't know about locally-created sessions).
-          let sdkUrl: string
-          let useCcrV2 = false
-          let workerEpoch: number | undefined
-          // Server decides per-session via the work secret; env var is the
-          // ant-dev override (e.g. forcing v2 before the server flag is on).
-          if (
-            secret.use_code_sessions === true ||
-            isEnvTruthy(process.env.CLAUDE_BRIDGE_USE_CCR_V2)
-          ) {
-            sdkUrl = buildCCRv2SdkUrl(config.apiBaseUrl, sessionId)
-            // Retry once on transient failure (network blip, 500) before
-            // permanently giving up and killing the session.
-            for (let attempt = 1; attempt <= 2; attempt++) {
-              try {
-                workerEpoch = await registerWorker(
-                  sdkUrl,
-                  secret.session_ingress_token,
-                )
-                useCcrV2 = true
-                logForDebugging(
-                  `[bridge:session] CCR v2: registered worker sessionId=${sessionId} epoch=${workerEpoch} attempt=${attempt}`,
-                )
-                break
-              } catch (err) {
-                const errMsg = errorMessage(err)
-                if (attempt < 2) {
-                  logForDebugging(
-                    `[bridge:session] CCR v2: registerWorker attempt ${attempt} failed, retrying: ${errMsg}`,
-                  )
-                  await sleep(2_000, loopSignal)
-                  if (loopSignal.aborted) break
-                  continue
-                }
-                logger.logError(
-                  `CCR v2 worker registration failed for session ${sessionId}: ${errMsg}`,
-                )
-                logError(new Error(`registerWorker failed: ${errMsg}`))
-                completedWorkIds.add(work.id)
-                trackCleanup(
-                  stopWorkWithRetry(
-                    api,
-                    environmentId,
-                    work.id,
-                    logger,
-                    backoffConfig.stopWorkBaseDelayMs,
-                  ),
-                )
-              }
-            }
-            if (!useCcrV2) break
-          } else {
-            sdkUrl = buildSdkUrl(config.sessionIngressUrl, sessionId)
-          }
-
-          // In worktree mode, on-demand sessions get an isolated git worktree
-          // so concurrent sessions don't interfere with each other's file
-          // changes. The pre-created initial session (if any) runs in
-          // config.dir so the user's first session lands in the directory they
-          // invoked `rc` from — matching the old single-session UX.
-          // In same-dir and single-session modes, all sessions share config.dir.
-          // Capture spawnMode before the await below — the `w` key handler
-          // mutates config.spawnMode directly, and createAgentWorktree can
-          // take 1-2s, so reading config.spawnMode after the await can
-          // produce contradictory analytics (spawn_mode:'same-dir', in_worktree:true).
-          const spawnModeAtDecision = config.spawnMode
-          let sessionDir = config.dir
-          let worktreeCreateMs = 0
-          if (
-            spawnModeAtDecision === 'worktree' &&
-            (initialSessionId === undefined ||
-              !sameSessionId(sessionId, initialSessionId))
-          ) {
-            const wtStart = Date.now()
-            try {
-              const wt = await createAgentWorktree(
-                `bridge-${safeFilenameId(sessionId)}`,
-              )
-              worktreeCreateMs = Date.now() - wtStart
-              sessionWorktrees.set(sessionId, {
-                worktreePath: wt.worktreePath,
-                worktreeBranch: wt.worktreeBranch,
-                gitRoot: wt.gitRoot,
-                hookBased: wt.hookBased,
-              })
-              sessionDir = wt.worktreePath
-              logForDebugging(
-                `[bridge:session] Created worktree for sessionId=${sessionId} at ${wt.worktreePath}`,
-              )
-            } catch (err) {
-              const errMsg = errorMessage(err)
-              logger.logError(
-                `Failed to create worktree for session ${sessionId}: ${errMsg}`,
-              )
-              logError(new Error(`Worktree creation failed: ${errMsg}`))
-              completedWorkIds.add(work.id)
-              trackCleanup(
-                stopWorkWithRetry(
-                  api,
-                  environmentId,
-                  work.id,
-                  logger,
-                  backoffConfig.stopWorkBaseDelayMs,
-                ),
-              )
-              break
-            }
-          }
-
-          logForDebugging(
-            `[bridge:session] Spawning sessionId=${sessionId} sdkUrl=${sdkUrl}`,
-          )
-
-          // compat-surface session_* form for logger/Sessions-API calls.
-          // Work poll returns cse_* under v2 compat; convert before spawn so
-          // the onFirstUserMessage callback can close over it.
-          const compatSessionId = toCompatSessionId(sessionId)
-
-          const spawnResult = safeSpawn(
-            spawner,
-            {
-              sessionId,
-              sdkUrl,
-              accessToken: secret.session_ingress_token,
-              useCcrV2,
-              workerEpoch,
-              onFirstUserMessage: text => {
-                // Server-set titles (--name, web rename) win. fetchSessionTitle
-                // runs concurrently; if it already populated titledSessions,
-                // skip. If it hasn't resolved yet, the derived title sticks —
-                // acceptable since the server had no title at spawn time.
-                if (titledSessions.has(compatSessionId)) return
-                titledSessions.add(compatSessionId)
-                const title = deriveSessionTitle(text)
-                logger.setSessionTitle(compatSessionId, title)
-                logForDebugging(
-                  `[bridge:title] derived title for ${compatSessionId}: ${title}`,
-                )
-                void import('./createSession.js')
-                  .then(({ updateBridgeSessionTitle }) =>
-                    updateBridgeSessionTitle(compatSessionId, title, {
-                      baseUrl: config.apiBaseUrl,
-                    }),
-                  )
-                  .catch(err =>
-                    logForDebugging(
-                      `[bridge:title] failed to update title for ${compatSessionId}: ${err}`,
-                      { level: 'error' },
-                    ),
-                  )
-              },
-            },
-            sessionDir,
-          )
-          if (typeof spawnResult === 'string') {
-            logger.logError(
-              `Failed to spawn session ${sessionId}: ${spawnResult}`,
-            )
-            // Clean up worktree if one was created for this session
-            const wt = sessionWorktrees.get(sessionId)
-            if (wt) {
-              sessionWorktrees.delete(sessionId)
-              trackCleanup(
-                removeAgentWorktree(
-                  wt.worktreePath,
-                  wt.worktreeBranch,
-                  wt.gitRoot,
-                  wt.hookBased,
-                ).catch((err: unknown) =>
-                  logger.logVerbose(
-                    `Failed to remove worktree ${wt.worktreePath}: ${errorMessage(err)}`,
-                  ),
-                ),
-              )
-            }
-            completedWorkIds.add(work.id)
-            trackCleanup(
-              stopWorkWithRetry(
-                api,
-                environmentId,
-                work.id,
-                logger,
-                backoffConfig.stopWorkBaseDelayMs,
-              ),
-            )
-            break
-          }
-          const handle = spawnResult
-
-          const spawnDurationMs = Date.now() - spawnStartTime
-          logEvent('tengu_bridge_session_started', {
-            active_sessions: activeSessions.size,
-            spawn_mode:
-              spawnModeAtDecision as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            in_worktree: sessionWorktrees.has(sessionId),
-            spawn_duration_ms: spawnDurationMs,
-            worktree_create_ms: worktreeCreateMs,
-            inProtectedNamespace: isInProtectedNamespace(),
-          })
-          logForDiagnosticsNoPII('info', 'bridge_session_started', {
-            spawn_mode: spawnModeAtDecision,
-            in_worktree: sessionWorktrees.has(sessionId),
-            spawn_duration_ms: spawnDurationMs,
-            worktree_create_ms: worktreeCreateMs,
-          })
-
-          activeSessions.set(sessionId, handle)
-          sessionWorkIds.set(sessionId, work.id)
-          sessionIngressTokens.set(sessionId, secret.session_ingress_token)
-          sessionCompatIds.set(sessionId, compatSessionId)
-
-          const startTime = Date.now()
-          sessionStartTimes.set(sessionId, startTime)
-
-          // Use a generic prompt description since we no longer get startup_context
-          logger.logSessionStart(sessionId, `Session ${sessionId}`)
-
-          // Compute the actual debug file path (mirrors sessionRunner.ts logic)
-          const safeId = safeFilenameId(sessionId)
-          let sessionDebugFile: string | undefined
-          if (config.debugFile) {
-            const ext = config.debugFile.lastIndexOf('.')
-            if (ext > 0) {
-              sessionDebugFile = `${config.debugFile.slice(0, ext)}-${safeId}${config.debugFile.slice(ext)}`
-            } else {
-              sessionDebugFile = `${config.debugFile}-${safeId}`
-            }
-          } else if (config.verbose || process.env.USER_TYPE === 'ant') {
-            sessionDebugFile = join(
-              tmpdir(),
-              'claude',
-              `bridge-session-${safeId}.log`,
-            )
-          }
-
-          if (sessionDebugFile) {
-            logger.logVerbose(`Debug log: ${sessionDebugFile}`)
-          }
-
-          // Register in the sessions Map before starting status updates so the
-          // first render tick shows the correct count and bullet list in sync.
-          logger.addSession(
-            compatSessionId,
-            getRemoteSessionUrl(compatSessionId, config.sessionIngressUrl),
-          )
-
-          // Start live status updates and transition to "Attached" state.
-          startStatusUpdates()
-          logger.setAttached(compatSessionId)
-
-          // One-shot title fetch. If the session already has a title (set via
-          // --name, web rename, or /remote-control), display it and mark as
-          // titled so the first-user-message fallback doesn't overwrite it.
-          // Otherwise onFirstUserMessage derives one from the first prompt.
-          void fetchSessionTitle(compatSessionId, config.apiBaseUrl)
-            .then(title => {
-              if (title && activeSessions.has(sessionId)) {
-                titledSessions.add(compatSessionId)
-                logger.setSessionTitle(compatSessionId, title)
-                logForDebugging(
-                  `[bridge:title] server title for ${compatSessionId}: ${title}`,
-                )
-              }
-            })
-            .catch(err =>
-              logForDebugging(
-                `[bridge:title] failed to fetch title for ${compatSessionId}: ${err}`,
-                { level: 'error' },
-              ),
-            )
-
-          // Start per-session timeout watchdog
-          const timeoutMs =
-            config.sessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS
-          if (timeoutMs > 0) {
-            const timer = setTimeout(
-              onSessionTimeout,
-              timeoutMs,
-              sessionId,
-              timeoutMs,
-              logger,
-              timedOutSessions,
-              handle,
-            )
-            sessionTimers.set(sessionId, timer)
-          }
-
-          // Schedule proactive token refresh before the JWT expires.
-          // onRefresh branches on v2Sessions: v1 delivers OAuth to the
-          // child, v2 triggers server re-dispatch via reconnectSession.
-          if (useCcrV2) {
-            v2Sessions.add(sessionId)
-          }
-          tokenRefresh?.schedule(sessionId, secret.session_ingress_token)
-
-          void handle.done.then(onSessionDone(sessionId, startTime, handle))
+          await handleSessionWork({ work, secret, ackWork })
           break
         }
         default:
@@ -1218,20 +1273,7 @@ export async function runBridgeLoop(
       // to avoid busy-looping. Include the capacity wake signal so the
       // sleep is interrupted immediately when a session completes.
       if (atCapacityBeforeSwitch) {
-        const cap = capacityWake.signal()
-        if (pollConfig.non_exclusive_heartbeat_interval_ms > 0) {
-          await heartbeatActiveWorkItems()
-          await sleep(
-            pollConfig.non_exclusive_heartbeat_interval_ms,
-            cap.signal,
-          )
-        } else if (pollConfig.multisession_poll_interval_ms_at_capacity > 0) {
-          await sleep(
-            pollConfig.multisession_poll_interval_ms_at_capacity,
-            cap.signal,
-          )
-        }
-        cap.cleanup()
+        await sleepAfterCapacityPoll(pollConfig)
       }
     } catch (err) {
       if (loopSignal.aborted) {
@@ -1274,8 +1316,11 @@ export async function runBridgeLoop(
         // greatly exceeds the expected backoff, the machine likely slept.
         // Reset error tracking so the bridge retries with a fresh budget.
         if (
-          lastPollErrorTime !== null &&
-          now - lastPollErrorTime > pollSleepDetectionThresholdMs(backoffConfig)
+          shouldResetPollErrorBudget(
+            lastPollErrorTime,
+            now,
+            pollSleepDetectionThresholdMs(backoffConfig),
+          )
         ) {
           logForDebugging(
             `[bridge:work] Detected system sleep (${Math.round((now - lastPollErrorTime) / 1000)}s gap), resetting error budget`,
@@ -1315,9 +1360,11 @@ export async function runBridgeLoop(
         generalErrorStart = null
         generalBackoff = 0
 
-        connBackoff = connBackoff
-          ? Math.min(connBackoff * 2, backoffConfig.connCapMs)
-          : backoffConfig.connInitialMs
+        connBackoff = nextBackoffMs(
+          connBackoff,
+          backoffConfig.connInitialMs,
+          backoffConfig.connCapMs,
+        )
         const delay = addJitter(connBackoff)
         logger.logVerbose(
           `Connection error, retrying in ${formatDelay(delay)} (${Math.round(elapsed / 1000)}s elapsed): ${errMsg}`,
@@ -1340,8 +1387,11 @@ export async function runBridgeLoop(
 
         // Sleep detection for general errors (same logic as connection errors)
         if (
-          lastPollErrorTime !== null &&
-          now - lastPollErrorTime > pollSleepDetectionThresholdMs(backoffConfig)
+          shouldResetPollErrorBudget(
+            lastPollErrorTime,
+            now,
+            pollSleepDetectionThresholdMs(backoffConfig),
+          )
         ) {
           logForDebugging(
             `[bridge:work] Detected system sleep (${Math.round((now - lastPollErrorTime) / 1000)}s gap), resetting error budget`,
@@ -1381,9 +1431,11 @@ export async function runBridgeLoop(
         connErrorStart = null
         connBackoff = 0
 
-        generalBackoff = generalBackoff
-          ? Math.min(generalBackoff * 2, backoffConfig.generalCapMs)
-          : backoffConfig.generalInitialMs
+        generalBackoff = nextBackoffMs(
+          generalBackoff,
+          backoffConfig.generalInitialMs,
+          backoffConfig.generalCapMs,
+        )
         const delay = addJitter(generalBackoff)
         logger.logVerbose(
           `Poll failed, retrying in ${formatDelay(delay)} (${Math.round(elapsed / 1000)}s elapsed): ${errMsg}`,
@@ -1579,102 +1631,6 @@ export async function runBridgeLoop(
   logger.logVerbose('Environment offline.')
 }
 
-const CONNECTION_ERROR_CODES = new Set([
-  'ECONNREFUSED',
-  'ECONNRESET',
-  'ETIMEDOUT',
-  'ENETUNREACH',
-  'EHOSTUNREACH',
-])
-
-export function isConnectionError(err: unknown): boolean {
-  if (
-    err &&
-    typeof err === 'object' &&
-    'code' in err &&
-    typeof err.code === 'string' &&
-    CONNECTION_ERROR_CODES.has(err.code)
-  ) {
-    return true
-  }
-  return false
-}
-
-/** Detect HTTP 5xx errors from axios (code: 'ERR_BAD_RESPONSE'). */
-export function isServerError(err: unknown): boolean {
-  return (
-    !!err &&
-    typeof err === 'object' &&
-    'code' in err &&
-    typeof err.code === 'string' &&
-    err.code === 'ERR_BAD_RESPONSE'
-  )
-}
-
-/** Add ±25% jitter to a delay value. */
-function addJitter(ms: number): number {
-  return Math.max(0, ms + ms * 0.25 * (2 * Math.random() - 1))
-}
-
-function formatDelay(ms: number): string {
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`
-}
-
-/**
- * Retry stopWork with exponential backoff (3 attempts, 1s/2s/4s).
- * Ensures the server learns the work item ended, preventing server-side zombies.
- */
-async function stopWorkWithRetry(
-  api: BridgeApiClient,
-  environmentId: string,
-  workId: string,
-  logger: BridgeLogger,
-  baseDelayMs = 1000,
-): Promise<void> {
-  const MAX_ATTEMPTS = 3
-
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      await api.stopWork(environmentId, workId, false)
-      logForDebugging(
-        `[bridge:work] stopWork succeeded for workId=${workId} on attempt ${attempt}/${MAX_ATTEMPTS}`,
-      )
-      return
-    } catch (err) {
-      // Auth/permission errors won't be fixed by retrying
-      if (err instanceof BridgeFatalError) {
-        if (isSuppressible403(err)) {
-          logForDebugging(
-            `[bridge:work] Suppressed stopWork 403 for ${workId}: ${err.message}`,
-          )
-        } else {
-          logger.logError(`Failed to stop work ${workId}: ${err.message}`)
-        }
-        logForDiagnosticsNoPII('error', 'bridge_stop_work_failed', {
-          attempts: attempt,
-          fatal: true,
-        })
-        return
-      }
-      const errMsg = errorMessage(err)
-      if (attempt < MAX_ATTEMPTS) {
-        const delay = addJitter(baseDelayMs * Math.pow(2, attempt - 1))
-        logger.logVerbose(
-          `Failed to stop work ${workId} (attempt ${attempt}/${MAX_ATTEMPTS}), retrying in ${formatDelay(delay)}: ${errMsg}`,
-        )
-        await sleep(delay)
-      } else {
-        logger.logError(
-          `Failed to stop work ${workId} after ${MAX_ATTEMPTS} attempts: ${errMsg}`,
-        )
-        logForDiagnosticsNoPII('error', 'bridge_stop_work_failed', {
-          attempts: MAX_ATTEMPTS,
-        })
-      }
-    }
-  }
-}
-
 function onSessionTimeout(
   sessionId: string,
   timeoutMs: number,
@@ -1694,196 +1650,6 @@ function onSessionTimeout(
   )
   timedOutSessions.add(sessionId)
   handle.kill()
-}
-
-export type ParsedArgs = {
-  verbose: boolean
-  sandbox: boolean
-  debugFile?: string
-  sessionTimeoutMs?: number
-  permissionMode?: string
-  name?: string
-  /** Value passed to --spawn (if any); undefined if no --spawn flag was given. */
-  spawnMode: SpawnMode | undefined
-  /** Value passed to --capacity (if any); undefined if no --capacity flag was given. */
-  capacity: number | undefined
-  /** --[no-]create-session-in-dir override; undefined = use default (on). */
-  createSessionInDir: boolean | undefined
-  /** Resume an existing session instead of creating a new one. */
-  sessionId?: string
-  /** Resume the last session in this directory (reads bridge-pointer.json). */
-  continueSession: boolean
-  help: boolean
-  error?: string
-}
-
-const SPAWN_FLAG_VALUES = ['session', 'same-dir', 'worktree'] as const
-
-function parseSpawnValue(raw: string | undefined): SpawnMode | string {
-  if (raw === 'session') return 'single-session'
-  if (raw === 'same-dir') return 'same-dir'
-  if (raw === 'worktree') return 'worktree'
-  return `--spawn requires one of: ${SPAWN_FLAG_VALUES.join(', ')} (got: ${raw ?? '<missing>'})`
-}
-
-function parseCapacityValue(raw: string | undefined): number | string {
-  const n = raw === undefined ? NaN : parseInt(raw, 10)
-  if (isNaN(n) || n < 1) {
-    return `--capacity requires a positive integer (got: ${raw ?? '<missing>'})`
-  }
-  return n
-}
-
-export function parseArgs(args: string[]): ParsedArgs {
-  let verbose = false
-  let sandbox = false
-  let debugFile: string | undefined
-  let sessionTimeoutMs: number | undefined
-  let permissionMode: string | undefined
-  let name: string | undefined
-  let help = false
-  let spawnMode: SpawnMode | undefined
-  let capacity: number | undefined
-  let createSessionInDir: boolean | undefined
-  let sessionId: string | undefined
-  let continueSession = false
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]!
-    if (arg === '--help' || arg === '-h') {
-      help = true
-    } else if (arg === '--verbose' || arg === '-v') {
-      verbose = true
-    } else if (arg === '--sandbox') {
-      sandbox = true
-    } else if (arg === '--no-sandbox') {
-      sandbox = false
-    } else if (arg === '--debug-file' && i + 1 < args.length) {
-      debugFile = resolve(args[++i]!)
-    } else if (arg.startsWith('--debug-file=')) {
-      debugFile = resolve(arg.slice('--debug-file='.length))
-    } else if (arg === '--session-timeout' && i + 1 < args.length) {
-      sessionTimeoutMs = parseInt(args[++i]!, 10) * 1000
-    } else if (arg.startsWith('--session-timeout=')) {
-      sessionTimeoutMs =
-        parseInt(arg.slice('--session-timeout='.length), 10) * 1000
-    } else if (arg === '--permission-mode' && i + 1 < args.length) {
-      permissionMode = args[++i]!
-    } else if (arg.startsWith('--permission-mode=')) {
-      permissionMode = arg.slice('--permission-mode='.length)
-    } else if (arg === '--name' && i + 1 < args.length) {
-      name = args[++i]!
-    } else if (arg.startsWith('--name=')) {
-      name = arg.slice('--name='.length)
-    } else if (
-      feature('KAIROS') &&
-      arg === '--session-id' &&
-      i + 1 < args.length
-    ) {
-      sessionId = args[++i]!
-      if (!sessionId) {
-        return makeError('--session-id requires a value')
-      }
-    } else if (feature('KAIROS') && arg.startsWith('--session-id=')) {
-      sessionId = arg.slice('--session-id='.length)
-      if (!sessionId) {
-        return makeError('--session-id requires a value')
-      }
-    } else if (feature('KAIROS') && (arg === '--continue' || arg === '-c')) {
-      continueSession = true
-    } else if (arg === '--spawn' || arg.startsWith('--spawn=')) {
-      if (spawnMode !== undefined) {
-        return makeError('--spawn may only be specified once')
-      }
-      const raw = arg.startsWith('--spawn=')
-        ? arg.slice('--spawn='.length)
-        : args[++i]
-      const v = parseSpawnValue(raw)
-      if (v === 'single-session' || v === 'same-dir' || v === 'worktree') {
-        spawnMode = v
-      } else {
-        return makeError(v)
-      }
-    } else if (arg === '--capacity' || arg.startsWith('--capacity=')) {
-      if (capacity !== undefined) {
-        return makeError('--capacity may only be specified once')
-      }
-      const raw = arg.startsWith('--capacity=')
-        ? arg.slice('--capacity='.length)
-        : args[++i]
-      const v = parseCapacityValue(raw)
-      if (typeof v === 'number') capacity = v
-      else return makeError(v)
-    } else if (arg === '--create-session-in-dir') {
-      createSessionInDir = true
-    } else if (arg === '--no-create-session-in-dir') {
-      createSessionInDir = false
-    } else {
-      return makeError(
-        `Unknown argument: ${arg}\nRun 'claude remote-control --help' for usage.`,
-      )
-    }
-  }
-
-  // Note: gate check for --spawn/--capacity/--create-session-in-dir is in bridgeMain
-  // (gate-aware error). Flag cross-validation happens here.
-
-  // --capacity only makes sense for multi-session modes.
-  if (spawnMode === 'single-session' && capacity !== undefined) {
-    return makeError(
-      `--capacity cannot be used with --spawn=session (single-session mode has fixed capacity 1).`,
-    )
-  }
-
-  // --session-id / --continue resume a specific session on its original
-  // environment; incompatible with spawn-related flags (which configure
-  // fresh session creation), and mutually exclusive with each other.
-  if (
-    (sessionId || continueSession) &&
-    (spawnMode !== undefined ||
-      capacity !== undefined ||
-      createSessionInDir !== undefined)
-  ) {
-    return makeError(
-      `--session-id and --continue cannot be used with --spawn, --capacity, or --create-session-in-dir.`,
-    )
-  }
-  if (sessionId && continueSession) {
-    return makeError(`--session-id and --continue cannot be used together.`)
-  }
-
-  return {
-    verbose,
-    sandbox,
-    debugFile,
-    sessionTimeoutMs,
-    permissionMode,
-    name,
-    spawnMode,
-    capacity,
-    createSessionInDir,
-    sessionId,
-    continueSession,
-    help,
-  }
-
-  function makeError(error: string): ParsedArgs {
-    return {
-      verbose,
-      sandbox,
-      debugFile,
-      sessionTimeoutMs,
-      permissionMode,
-      name,
-      spawnMode,
-      capacity,
-      createSessionInDir,
-      sessionId,
-      continueSession,
-      help,
-      error,
-    }
-  }
 }
 
 async function printHelp(): Promise<void> {
@@ -1950,15 +1716,6 @@ ${serverNote}`
   console.log(help)
 }
 
-const TITLE_MAX_LEN = 80
-
-/** Derive a session title from a user message: first line, truncated. */
-function deriveSessionTitle(text: string): string {
-  // Collapse whitespace — newlines/tabs would break the single-line status display.
-  const flat = text.replace(/\s+/g, ' ').trim()
-  return truncateToWidth(flat, TITLE_MAX_LEN)
-}
-
 /**
  * One-shot fetch of a session's title via GET /v1/sessions/{id}.
  *
@@ -1976,6 +1733,10 @@ async function fetchSessionTitle(
   const session = await getBridgeSession(compatSessionId, { baseUrl })
   return session?.title || undefined
 }
+
+// ============================================================================
+// SECTION: MAIN ENTRY POINT — bridgeMain
+// ============================================================================
 
 export async function bridgeMain(args: string[]): Promise<void> {
   const parsed = parseArgs(args)
@@ -2775,6 +2536,10 @@ export async function bridgeMain(args: string[]): Promise<void> {
  * daemon worker catches this and exits with EXIT_CODE_PERMANENT so the
  * supervisor parks the worker instead of respawning it on backoff.
  */
+// ============================================================================
+// SECTION: HEADLESS BRIDGE — BridgeHeadlessPermanentError, runBridgeHeadless
+// ============================================================================
+
 export class BridgeHeadlessPermanentError extends Error {
   constructor(message: string) {
     super(message)

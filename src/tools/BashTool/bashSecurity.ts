@@ -518,6 +518,10 @@ function isSafeHeredoc(command: string): boolean {
  * Returns the command with matched heredocs stripped, or null if none found.
  * Used by the pre-split gate to strip safe heredocs and re-check the remainder.
  */
+// ============================================================================
+// SECTION: EXPORTED API — public functions
+// ============================================================================
+
 export function stripSafeHeredocSubstitutions(command: string): string | null {
   if (!HEREDOC_IN_SUBSTITUTION.test(command)) return null
 

@@ -395,6 +395,10 @@ const MAX_RECEIVED_UUIDS = 10_000
 const receivedMessageUuids = new Set<UUID>()
 const receivedMessageUuidsOrder: UUID[] = []
 
+// ============================================================================
+// SECTION: UTILITIES — UUID tracking, prompt helpers, batching
+// ============================================================================
+
 function trackReceivedMessageUuid(uuid: UUID): boolean {
   if (receivedMessageUuids.has(uuid)) {
     return false // duplicate
@@ -451,6 +455,10 @@ export function canBatchWith(
     next.isMeta === head.isMeta
   )
 }
+
+// ============================================================================
+// SECTION: HEADLESS ENTRY POINT — runHeadless, runHeadlessStreaming
+// ============================================================================
 
 export async function runHeadless(
   inputPrompt: string | AsyncIterable<string>,
@@ -805,6 +813,10 @@ export async function runHeadless(
     : options.permissionPromptToolName
 
   // Callback for when a permission prompt is shown
+// ============================================================================
+// SECTION: PERMISSIONS & ELICITATION — onPermissionPrompt, registerElicitationHandlers
+// ============================================================================
+
   const onPermissionPrompt = (details: RequiresActionDetails) => {
     if (feature('COMMIT_ATTRIBUTION')) {
       setAppState(prev => ({
@@ -1471,6 +1483,10 @@ function runHeadlessStreaming(
   // Shared tool assembly for ask() and the get_context_usage control request.
   // Closes over the mutable sdkTools/dynamicMcpState bindings so both call
   // sites see late-connecting servers.
+// ============================================================================
+// SECTION: TOOL POOL & MCP MANAGEMENT — buildAllTools, applyMcpServerChanges
+// ============================================================================
+
   const buildAllTools = (appState: AppState): Tools => {
     const assembledTools = assembleToolPool(
       appState.toolPermissionContext,
@@ -1931,6 +1947,10 @@ function runHeadlessStreaming(
       // Drains the queue, batching consecutive prompt-mode commands into one
       // ask() call so messages that queued up during a long turn coalesce
       // into a single follow-up turn instead of N separate turns.
+// ============================================================================
+// SECTION: COMMAND QUEUE — drainCommandQueue
+// ============================================================================
+
       const drainCommandQueue = async () => {
         while ((command = dequeue(isMainThread))) {
           if (
@@ -3038,6 +3058,10 @@ function runHeadlessStreaming(
               // readFileSyncWithMetadata. FileEditTool's content-compare
               // fallback (for Windows mtime bumps without content change)
               // compares against LF-normalized disk reads.
+// ============================================================================
+// SECTION: SESSION CONTENT RENDERING — content, titleSignal
+// ============================================================================
+
               const content = (
                 raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw
               ).replaceAll('\r\n', '\n')
@@ -4146,6 +4170,10 @@ function runHeadlessStreaming(
  * Creates a CanUseToolFn that incorporates a custom permission prompt tool.
  * This function converts the permissionPromptTool into a CanUseToolFn that can be used in ask.tsx
  */
+// ============================================================================
+// SECTION: PERMISSION TOOL HOOKS — createCanUseToolWithPermissionPrompt, getCanUseToolFn
+// ============================================================================
+
 export function createCanUseToolWithPermissionPrompt(
   permissionPromptTool: PermissionPromptTool,
 ): CanUseToolFn {
@@ -4332,6 +4360,10 @@ export function getCanUseToolFn(
     )
   }
 }
+
+// ============================================================================
+// SECTION: SDK CONTROL HANDLERS — handleInitializeRequest, handleSetPermissionMode, etc.
+// ============================================================================
 
 async function handleInitializeRequest(
   request: SDKControlInitializeRequest,
@@ -4890,6 +4922,10 @@ type LoadInitialMessagesResult = {
   agentSetting?: string
 }
 
+// ============================================================================
+// SECTION: SESSION LOADING — loadInitialMessages
+// ============================================================================
+
 async function loadInitialMessages(
   setAppState: (f: (prev: AppState) => AppState) => void,
   options: {
@@ -5302,6 +5338,10 @@ export async function handleOrphanedPermissionResponse({
   }
   return false
 }
+
+// ============================================================================
+// SECTION: MCP DYNAMIC STATE & RECONCILIATION — DynamicMcpState, handleMcpSetServers, reconcileMcpServers
+// ============================================================================
 
 export type DynamicMcpState = {
   clients: MCPServerConnection[]

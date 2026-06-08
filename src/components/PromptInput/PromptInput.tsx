@@ -1,3 +1,7 @@
+// ============================================================================
+// SECTION: RENDER — JSX output
+// ============================================================================
+
 import { feature } from 'bun:bundle';
 import chalk from 'chalk';
 import * as path from 'path';
@@ -189,6 +193,10 @@ type Props = {
 };
 
 // Bottom slot has maxHeight="50%"; reserve lines for footer, border, status.
+// ============================================================================
+// SECTION: COMPONENT STATE & REFS — hooks, refs, derived state
+// ============================================================================
+
 const PROMPT_FOOTER_LINES = 5;
 const MIN_INPUT_VIEWPORT_LINES = 3;
 function PromptInput({

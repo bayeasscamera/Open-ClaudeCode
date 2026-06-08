@@ -100,6 +100,10 @@ const ENV_VAR_ASSIGN_RE = /^[A-Za-z_]\w*=/
 // strace showed /proc/self/stat reads at ~127Hz with no epoll_wait. Fifty is
 // generous: legitimate user commands don't split that wide. Above the cap we
 // fall back to 'ask' (safe default — we can't prove safety, so we prompt).
+// ============================================================================
+// SECTION: EXPORTED API — public functions
+// ============================================================================
+
 export const MAX_SUBCOMMANDS_FOR_SECURITY_CHECK = 50
 
 // GH#11380: Cap the number of per-subcommand rules suggested for compound

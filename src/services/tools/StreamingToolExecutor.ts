@@ -497,6 +497,20 @@ export class StreamingToolExecutor {
   }
 
   /**
+   * Dispose all state and abort in-flight work.
+   * Safe to call multiple times.
+   */
+  destroy(): void {
+    this.discard()
+    try {
+      this.siblingAbortController.abort()
+    } catch {
+      // ignore
+    }
+    this.tools = []
+  }
+
+  /**
    * Check if there are any tools still executing
    */
   private hasExecutingTools(): boolean {

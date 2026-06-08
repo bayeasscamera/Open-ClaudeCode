@@ -1,11 +1,12 @@
 {
-  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "claude-code-plugins",
-  "version": "1.0.0",
-  "description": "Bundled plugins for Claude Code including Agent SDK development tools, PR review toolkit, and commit workflows",
   "owner": {
     "name": "Anthropic",
     "email": "support@anthropic.com"
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "description": "Bundled plugins for Claude Code including Agent SDK development tools, PR review toolkit, and commit workflows"
   },
   "plugins": [
     {
@@ -79,6 +80,16 @@
       },
       "source": "./plugins/frontend-design",
       "category": "development"
+    },
+    {
+      "name": "gstack-workflows",
+      "description": "Lightweight gstack-inspired engineering workflows for investigation, review, security, QA reporting, and documentation release checks",
+      "version": "0.1.0",
+      "author": {
+        "name": "OPC Contributors"
+      },
+      "source": "./plugins/gstack-workflows",
+      "category": "productivity"
     },
     {
       "name": "hookify",

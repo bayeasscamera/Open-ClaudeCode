@@ -1243,6 +1243,10 @@ const SAFE_TARGET_COMMANDS_FOR_XARGS = [
  * Uses declarative configuration from COMMAND_ALLOWLIST to validate commands and their flags.
  * Handles combined flags, argument validation, and shell quoting bypass detection.
  */
+// ============================================================================
+// SECTION: EXPORTED API — public functions
+// ============================================================================
+
 export function isCommandSafeViaFlagParsing(command: string): boolean {
   // Parse the command to get individual tokens using shell-quote for accuracy
   // Handle glob operators by converting them to strings, they don't matter from the perspective

@@ -109,6 +109,10 @@ import {
   incrementBudgetContinuationCount,
 } from './bootstrap/state.js'
 import { createBudgetTracker, checkTokenBudget } from './query/tokenBudget.js'
+import {
+  MAX_OUTPUT_TOKENS_RECOVERY_LIMIT,
+  isWithheldMaxOutputTokens,
+} from './query/recoveryPolicy.js'
 import { count } from './utils/array.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -161,23 +165,6 @@ function* yieldMissingToolResultBlocks(
  * the rules of thinking are the rules of the universe. If ye does not heed these
  * rules, ye will be punished with an entire day of debugging and hair pulling.
  */
-const MAX_OUTPUT_TOKENS_RECOVERY_LIMIT = 3
-
-/**
- * Is this a max_output_tokens error message? If so, the streaming loop should
- * withhold it from SDK callers until we know whether the recovery loop can
- * continue. Yielding early leaks an intermediate error to SDK callers (e.g.
- * cowork/desktop) that terminate the session on any `error` field — the
- * recovery loop keeps running but nobody is listening.
- *
- * Mirrors reactiveCompact.isWithheldPromptTooLong.
- */
-function isWithheldMaxOutputTokens(
-  msg: Message | StreamEvent | undefined,
-): msg is AssistantMessage {
-  return msg?.type === 'assistant' && msg.apiError === 'max_output_tokens'
-}
-
 export type QueryParams = {
   messages: Message[]
   systemPrompt: SystemPrompt

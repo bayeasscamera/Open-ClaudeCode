@@ -107,6 +107,8 @@ import {
   normalizeMessage,
 } from './utils/queryHelpers.js'
 
+import { guardArrayPush, HARD_MAX_MESSAGES } from './utils/memoryGuard.js'
+
 // Dead code elimination: conditional import for coordinator mode
 /* eslint-disable @typescript-eslint/no-require-imports */
 const getCoordinatorUserContext: (
@@ -204,6 +206,12 @@ export class QueryEngine {
     this.permissionDenials = []
     this.readFileState = config.readFileCache
     this.totalUsage = EMPTY_USAGE
+  }
+
+  private pushMessages(...messages: Message[]): void {
+    for (const msg of messages) {
+      guardArrayPush(this.mutableMessages, msg, HARD_MAX_MESSAGES)
+    }
   }
 
   async *submitMessage(
@@ -428,7 +436,7 @@ export class QueryEngine {
     })
 
     // Push new messages, including user input and any attachments
-    this.mutableMessages.push(...messagesFromUserInput)
+    this.pushMessages(...messagesFromUserInput)
 
     // Update params to reflect updates from processing /slash commands
     const messages = [...this.mutableMessages]
@@ -765,11 +773,11 @@ export class QueryEngine {
           if (message.message.stop_reason != null) {
             lastStopReason = message.message.stop_reason
           }
-          this.mutableMessages.push(message)
+          this.pushMessages(message)
           yield* normalizeMessage(message)
           break
         case 'progress':
-          this.mutableMessages.push(message)
+          this.pushMessages(message)
           // Record inline so the dedup loop in the next ask() call sees it
           // as already-recorded. Without this, deferred progress interleaves
           // with already-recorded tool_results in mutableMessages, and the
@@ -782,7 +790,7 @@ export class QueryEngine {
           yield* normalizeMessage(message)
           break
         case 'user':
-          this.mutableMessages.push(message)
+          this.pushMessages(message)
           yield* normalizeMessage(message)
           break
         case 'stream_event':
@@ -827,7 +835,7 @@ export class QueryEngine {
 
           break
         case 'attachment':
-          this.mutableMessages.push(message)
+          this.pushMessages(message)
           // Record inline (same reason as progress above).
           if (persistSession) {
             messages.push(message)
@@ -913,7 +921,7 @@ export class QueryEngine {
             }
             break
           }
-          this.mutableMessages.push(message)
+          this.pushMessages(message)
           // Yield compact boundary messages to SDK
           if (
             message.subtype === 'compact_boundary' &&

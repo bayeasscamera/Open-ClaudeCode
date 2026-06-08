@@ -1,0 +1,8 @@
+{
+  "name": "gstack-workflows",
+  "version": "0.1.0",
+  "description": "Lightweight gstack-inspired engineering workflows for OPC: investigation, review, security, QA reporting, and documentation release checks.",
+  "author": {
+    "name": "OPC Contributors"
+  }
+}
