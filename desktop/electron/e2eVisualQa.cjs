@@ -3,21 +3,48 @@ const os = require('node:os')
 const path = require('node:path')
 
 const SCREEN_DELAY_MS = 120
-const VISUAL_TIMEOUT_MS = 45000
+const STEP_TIMEOUT_MS = 12000
+const VISUAL_TIMEOUT_MS = 90000
 const MIN_SCREEN_CONTRAST = 27.95
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-async function rendererEval(window, script) {
-  return window.webContents.executeJavaScript(script)
+function withTimeout(label, promise, timeoutMs = STEP_TIMEOUT_MS) {
+  let timer = null
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
 }
 
-async function waitForPaint(window) {
-  await rendererEval(window, `
-    new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, ${SCREEN_DELAY_MS})))
-  `)
+async function rendererEval(window, script, label = 'renderer evaluation') {
+  return withTimeout(label, window.webContents.executeJavaScript(script))
+}
+
+async function waitForSelector(window, selector, label = selector) {
+  return rendererEval(window, `
+    (async () => {
+      const startedAt = Date.now()
+      while (Date.now() - startedAt < ${STEP_TIMEOUT_MS}) {
+        const el = document.querySelector(${JSON.stringify(selector)})
+        if (el) {
+          const rect = el.getBoundingClientRect()
+          const style = getComputedStyle(el)
+          if (style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0) {
+            return true
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 50))
+      }
+      throw new Error('selector not visible: ${selector}')
+    })()
+  `, `wait for ${label}`)
+}
+
+async function waitForPaint() {
+  await sleep(SCREEN_DELAY_MS)
 }
 
 function visualArtifactDir() {
@@ -413,7 +440,7 @@ async function domSnapshot(window) {
         }
       }
     })()
-  `)
+  `, 'dom snapshot')
 }
 
 function assertBox(name, dom, key, minWidth, minHeight) {
@@ -452,7 +479,7 @@ async function captureScreen(window, artifactDir, index, name, expectations) {
   await waitForPaint(window)
   const dom = await domSnapshot(window)
   assertDomHealth(name, dom, expectations)
-  const image = await window.webContents.capturePage()
+  const image = await withTimeout(`capture ${name}`, window.webContents.capturePage())
   const screenshot = path.join(artifactDir, `${String(index).padStart(2, '0')}-${name}.png`)
   fs.writeFileSync(screenshot, image.toPNG())
   const metrics = colorMetrics(image)
@@ -476,101 +503,123 @@ async function captureScreen(window, artifactDir, index, name, expectations) {
 
 async function openProjectModal(window) {
   await rendererEval(window, `
-    (async () => {
-      document.querySelector('#newProject').click()
-      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, ${SCREEN_DELAY_MS})))
+    (() => {
+      const button = document.querySelector('#newProject')
+      if (!button) throw new Error('new project button missing')
+      button.click()
+    })()
+  `, 'open project modal')
+  await waitForSelector(window, '#projectModal:not(.hidden) #projectNameInput', 'project modal')
+  await rendererEval(window, `
+    (() => {
       document.querySelector('#projectNameInput').value = 'QA Visuelle'
       document.querySelector('#projectDescriptionInput').value = 'Projet de contrôle visuel automatisé'
       document.querySelector('#projectMemoryInput').value = 'Préférer une interface dense, lisible et stable.'
       document.querySelector('#projectInstructionsInput').value = 'Afficher clairement les étapes, outils et fichiers utilisés.'
     })()
-  `)
+  `, 'fill project modal')
 }
 
 async function submitProjectAndCreateChat(window) {
   await rendererEval(window, `
-    (async () => {
-      document.querySelector('#projectForm').requestSubmit()
-      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, ${SCREEN_DELAY_MS})))
-      document.querySelector('#newChat').click()
-      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, ${SCREEN_DELAY_MS})))
-      document.querySelector('#messages').scrollTop = 0
+    (() => {
+      const form = document.querySelector('#projectForm')
+      if (!form) throw new Error('project form missing')
+      form.requestSubmit()
     })()
-  `)
+  `, 'submit project')
+  await waitForSelector(window, '.projectContextPanel', 'project context panel')
+  await rendererEval(window, `
+    (() => {
+      const button = document.querySelector('#newChat')
+      if (!button) throw new Error('new chat button missing')
+      button.click()
+      const messages = document.querySelector('#messages')
+      if (messages) messages.scrollTop = 0
+    })()
+  `, 'create chat for project')
 }
 
 async function openInspector(window) {
   await rendererEval(window, `
-    (async () => {
+    (() => {
       const logs = document.querySelector('#logsPanel')
-      if (logs.classList.contains('hidden')) document.querySelector('#logsToggle').click()
-      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, ${SCREEN_DELAY_MS})))
-      document.querySelector('#messages').scrollTop = 0
+      const toggle = document.querySelector('#logsToggle')
+      if (!logs || !toggle) throw new Error('inspector controls missing')
+      if (logs.classList.contains('hidden')) toggle.click()
+      const messages = document.querySelector('#messages')
+      if (messages) messages.scrollTop = 0
     })()
-  `)
+  `, 'open inspector')
+  await waitForSelector(window, '#logsPanel:not(.hidden)', 'logs panel')
 }
 
 async function openSettings(window) {
   await rendererEval(window, `
-    (async () => {
-      document.querySelector('#settingsToggle').click()
-      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, ${SCREEN_DELAY_MS})))
-      document.querySelector('[data-settings-tab="providers"]').click()
-      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, ${SCREEN_DELAY_MS})))
+    (() => {
+      const toggle = document.querySelector('#settingsToggle')
+      if (!toggle) throw new Error('settings button missing')
+      toggle.click()
     })()
-  `)
+  `, 'open settings')
+  await waitForSelector(window, '#settingsModal:not(.hidden)', 'settings modal')
+  await rendererEval(window, `
+    (() => {
+      const tab = document.querySelector('[data-settings-tab="providers"]')
+      if (!tab) throw new Error('providers settings tab missing')
+      tab.click()
+    })()
+  `, 'open provider settings tab')
+  await waitForSelector(window, '[data-settings-panel="providers"].active', 'provider settings panel')
 }
 
 async function openProviderEditor(window) {
   await rendererEval(window, `
-    (async () => {
+    (() => {
       document.querySelector('#settingsSearchInput').value = ''
       document.querySelector('#settingsSearchInput').dispatchEvent(new Event('input', { bubbles: true }))
       document.querySelector('[data-settings-tab="providers"]').click()
-      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, ${SCREEN_DELAY_MS})))
       document.querySelector('#settingsAddProvider').click()
-      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, ${SCREEN_DELAY_MS})))
       document.querySelector('#settingsProviderModel').value = 'qa/provider-model'
       document.querySelector('#settingsProviderBaseUrl').value = 'http://localhost:8317/v1'
     })()
-  `)
+  `, 'open provider editor')
+  await waitForSelector(window, '#settingsProviderEditor:not(.hidden)', 'provider editor')
 }
 
 async function openProviderImport(window) {
   await rendererEval(window, `
-    (async () => {
+    (() => {
       const search = document.querySelector('#settingsSearchInput')
       if (search) {
         search.value = ''
         search.dispatchEvent(new Event('input', { bubbles: true }))
       }
       document.querySelector('[data-settings-tab="providers"]')?.click()
-      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, ${SCREEN_DELAY_MS})))
       const button = document.querySelector('#settingsImportProviders')
       if (!button) throw new Error('provider import button missing')
       button.scrollIntoView({ block: 'center' })
       button.click()
-      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, ${SCREEN_DELAY_MS})))
-      const panel = document.querySelector('#settingsProviderImportPanel')
-      if (!panel || panel.classList.contains('hidden')) throw new Error('provider import panel did not open')
-      panel.scrollIntoView({ block: 'center' })
     })()
-  `)
+  `, 'open provider import')
+  await waitForSelector(window, '#settingsProviderImportPanel:not(.hidden)', 'provider import panel')
+  await rendererEval(window, `
+    (() => document.querySelector('#settingsProviderImportPanel')?.scrollIntoView({ block: 'center' }))()
+  `, 'scroll provider import panel')
 }
 
 async function filterSettingsToProject(window) {
   await rendererEval(window, `
-    (async () => {
+    (() => {
       const input = document.querySelector('#settingsSearchInput')
       input.value = 'instructions'
       input.dispatchEvent(new Event('input', { bubbles: true }))
-      await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, ${SCREEN_DELAY_MS})))
       const projectPanel = document.querySelector('[data-settings-panel="project"]')
       const providersPanel = document.querySelector('[data-settings-panel="providers"]')
       if (!projectPanel?.classList.contains('active')) throw new Error('settings search did not activate project panel')
       if (!providersPanel?.classList.contains('searchHidden')) throw new Error('settings search did not hide provider panel')
     })()
-  `)
+  `, 'filter settings to project')
 }
 
 function attachVisualQa(window, app) {
