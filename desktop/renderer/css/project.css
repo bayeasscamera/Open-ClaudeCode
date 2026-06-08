@@ -1,0 +1,830 @@
+.projectContextPanel {
+  width: min(100%, var(--content-max));
+  margin: 0 auto 32px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: var(--radius-panel);
+  padding: 20px;
+  background: #282827;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+}
+
+.projectHero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 16px;
+  align-items: start;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.projectHero span,
+.projectSectionHead span,
+.projectStats em {
+  color: #7b8075;
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.projectHero h2 {
+  margin: 4px 0 4px;
+  color: #f0ebe2;
+  font-size: 25px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.projectHero p {
+  margin: 0;
+  max-width: 72ch;
+  color: #aaa49b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.projectStats {
+  min-width: 86px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  background: #30302f;
+  box-shadow: none;
+}
+
+.projectStats strong {
+  color: var(--accent-2);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.projectToolbar {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.projectActionButton {
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 11px;
+  padding: 0 10px;
+  color: #e8e2d8;
+  background: #333331;
+  font-size: 12px;
+  font-weight: 840;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.projectActionButton:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.projectActionButton.danger {
+  color: var(--danger);
+}
+
+.projectLocalContextStrip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  padding-top: 16px;
+}
+
+.projectContextTile {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 14px;
+  padding: 10px;
+  background: #30302f;
+  box-shadow: none;
+}
+
+.projectContextTile.ok {
+  border-color: rgba(121, 184, 139, 0.26);
+  background: rgba(121, 184, 139, 0.10);
+}
+
+.projectContextTile span,
+.projectContextTile strong,
+.projectContextTile em {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectContextTile span {
+  color: var(--accent-2);
+  font-size: 10px;
+  font-weight: 880;
+  text-transform: uppercase;
+}
+
+.projectContextTile strong {
+  margin-top: 4px;
+  color: #f0ebe2;
+  font-size: 15px;
+  line-height: 1.1;
+}
+
+.projectContextTile em {
+  margin-top: 3px;
+  color: #7b8075;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.projectContextGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 18px;
+}
+
+.projectSectionCard {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 16px;
+  padding: 14px;
+  background: #2b2b2a;
+  box-shadow: none;
+}
+
+.projectSectionHead {
+  margin-bottom: 9px;
+}
+
+.projectSectionHead strong {
+  display: block;
+  color: #f0ebe2;
+  font-size: 14px;
+}
+
+.projectSectionHead span {
+  display: block;
+  margin-top: 2px;
+  text-transform: none;
+}
+
+.projectSectionCard textarea {
+  min-height: 128px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 13px;
+  padding: 11px;
+  background: #30302f;
+  color: #eee8df;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.projectSectionCard textarea:focus {
+  border-color: rgba(231, 111, 46, 0.42);
+  box-shadow: 0 0 0 3px rgba(231, 111, 46, 0.12);
+}
+
+.projectFilesCard {
+  grid-column: 1 / -1;
+}
+
+.projectCompetenceCard {
+  grid-column: 1 / -1;
+}
+
+.projectRuntimeCard {
+  grid-column: 1 / -1;
+}
+
+.projectRuntimeGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.projectRuntimeGrid div {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 13px;
+  padding: 9px 10px;
+  background: #30302f;
+}
+
+.projectRuntimeGrid span,
+.projectRuntimeGrid strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectRuntimeGrid span {
+  color: #7b8075;
+  font-size: 11px;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.projectRuntimeGrid strong {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.projectFilesHead {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.projectFileToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.projectFileSearch {
+  width: min(320px, 42vw);
+  height: 30px;
+  border: 1px solid rgba(222, 216, 202, 0.88);
+  border-radius: 10px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: rgba(255, 253, 248, 0.92);
+  font-size: 12px;
+}
+
+.projectFileSearch:focus {
+  border-color: rgba(231, 111, 46, 0.42);
+  box-shadow: 0 0 0 3px rgba(231, 111, 46, 0.1);
+}
+
+.projectFileCount {
+  margin: -2px 0 8px;
+  color: #7f847b;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.projectFilesHead button,
+.projectFileItem button {
+  height: 30px;
+  border: 1px solid rgba(222, 216, 202, 0.88);
+  border-radius: 10px;
+  padding: 0 10px;
+  color: #3d4139;
+  background: rgba(255, 254, 251, 0.94);
+  font-size: 12px;
+  font-weight: 820;
+  cursor: pointer;
+}
+
+.projectFilesHead button:hover,
+.projectFileItem button:hover {
+  border-color: var(--border-strong);
+}
+
+.projectFileList {
+  display: grid;
+  gap: 8px;
+}
+
+.projectFileItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(222, 216, 202, 0.82);
+  border-radius: 13px;
+  padding: 10px;
+  background: rgba(255, 253, 248, 0.82);
+}
+
+.projectFileItem strong,
+.projectFileItem span,
+.projectFileItem em {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.projectFileItem strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.projectFileItem span {
+  margin-top: 2px;
+  color: #7a8075;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.projectFileItem em {
+  margin-top: 3px;
+  color: #8b8f86;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.projectFileActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.projectFileItem .remove {
+  color: var(--danger);
+}
+
+.projectFileItem .readNext.active {
+  border-color: rgba(35, 133, 83, 0.36);
+  color: #1f6f47;
+  background: rgba(35, 133, 83, 0.08);
+}
+
+.projectFilePreview {
+  grid-column: 1 / -1;
+  border-top: 1px solid rgba(222, 216, 202, 0.76);
+  padding-top: 8px;
+}
+
+.projectFilePreview summary {
+  color: #7b8075;
+  font-size: 12px;
+  font-weight: 820;
+  cursor: pointer;
+}
+
+.projectFilePreview p {
+  margin: 8px 0;
+  color: #3a3f37;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.projectFileMetaChips,
+.projectFileMatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.projectFileMetaChips span {
+  border: 1px solid rgba(222, 216, 202, 0.84);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: #5f665d;
+  background: rgba(255, 253, 248, 0.78);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.projectFileMatches mark {
+  display: block;
+  border-left: 2px solid rgba(231, 111, 46, 0.55);
+  border-radius: 7px;
+  padding: 5px 8px;
+  color: #53311f;
+  background: rgba(231, 111, 46, 0.09);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.projectFilePreview pre {
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid rgba(222, 216, 202, 0.84);
+  border-radius: 12px;
+  padding: 10px;
+  color: #242920;
+  background: rgba(255, 255, 255, 0.74);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.projectFileEmpty {
+  border: 1px dashed rgba(222, 216, 202, 0.92);
+  border-radius: 14px;
+  padding: 14px;
+  color: #747a70;
+  background: rgba(255, 253, 248, 0.66);
+  font-size: 13px;
+}
+
+.projectCompetenceStats,
+.projectCompetenceDomains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 2px 0 10px;
+}
+
+.projectCompetenceStats span,
+.projectCompetenceDomains span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(231, 111, 46, 0.18);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #70472c;
+  background: rgba(231, 111, 46, 0.07);
+  font-size: 11px;
+  font-weight: 790;
+}
+
+.projectCompetenceStats b {
+  color: var(--accent-2);
+  font-size: 13px;
+}
+
+.projectCompetenceStats em {
+  color: #686f65;
+  font-style: normal;
+}
+
+.projectCompetenceList {
+  display: grid;
+  gap: 8px;
+}
+
+.projectCompetenceItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(222, 216, 202, 0.82);
+  border-radius: 14px;
+  padding: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 249, 241, 0.66));
+}
+
+.projectCompetenceItem.builtIn {
+  border-color: rgba(231, 111, 46, 0.28);
+  background:
+    linear-gradient(180deg, rgba(255, 248, 239, 0.84), rgba(255, 253, 248, 0.66));
+}
+
+.projectCompetenceItem strong,
+.projectCompetenceItem span,
+.projectCompetenceItem em {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectCompetenceItem strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.projectCompetenceItem span {
+  margin-top: 3px;
+  color: #5f655c;
+  font-size: 12px;
+}
+
+.projectCompetenceItem em {
+  margin-top: 4px;
+  color: #8a6a55;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.projectEmptyState {
+  width: min(100%, var(--content-max));
+  margin: -12px auto 34px;
+  border: 1px dashed rgba(231, 111, 46, 0.36);
+  border-radius: 18px;
+  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  background: rgba(255, 248, 239, 0.66);
+}
+
+.projectEmptyState strong {
+  display: block;
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.projectEmptyState span {
+  display: block;
+  margin-top: 4px;
+  color: #70766c;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.projectEmptyState button {
+  height: 34px;
+  border: 1px solid rgba(231, 111, 46, 0.35);
+  border-radius: 11px;
+  padding: 0 13px;
+  color: #813c18;
+  background: #fffdf8;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.projectEmptyState button:hover {
+  border-color: rgba(231, 111, 46, 0.58);
+  background: #fff8ef;
+}
+
+.runtimeProjectContext {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(222, 216, 202, 0.86);
+  border-radius: 16px;
+  padding: 13px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 250, 243, 0.72)),
+    rgba(255, 253, 248, 0.78);
+}
+
+.runtimeProjectHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.runtimeProjectHead span {
+  color: var(--accent-2);
+  font-size: 11px;
+  font-weight: 860;
+  text-transform: uppercase;
+}
+
+.runtimeProjectHead strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtimeProjectStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.runtimeProjectStats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(231, 111, 46, 0.18);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: #75482d;
+  background: rgba(231, 111, 46, 0.07);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.runtimeProjectStats em {
+  color: var(--ink);
+  font-style: normal;
+}
+
+.runtimeProjectFiles {
+  display: grid;
+  gap: 7px;
+}
+
+.runtimeProjectCompetences {
+  display: grid;
+  gap: 7px;
+  border: 1px solid rgba(231, 111, 46, 0.16);
+  border-radius: 13px;
+  padding: 9px;
+  background: rgba(231, 111, 46, 0.06);
+}
+
+.runtimeProjectCompetences > strong {
+  color: var(--accent-2);
+  font-size: 11px;
+  font-weight: 860;
+  text-transform: uppercase;
+}
+
+.runtimeProjectRuntime,
+.runtimeProjectSessions {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(222, 216, 202, 0.72);
+  border-radius: 13px;
+  padding: 9px;
+  background: rgba(255, 253, 248, 0.74);
+}
+
+.runtimeProjectRuntime strong,
+.runtimeProjectSessions strong {
+  color: var(--accent-2);
+  font-size: 11px;
+  font-weight: 860;
+  text-transform: uppercase;
+}
+
+.runtimeProjectRuntime span,
+.runtimeProjectSessions span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: #5e655b;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtimeProjectFiles p {
+  margin: 0;
+  color: #73796f;
+  font-size: 12px;
+}
+
+.runtimeProjectFile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(222, 216, 202, 0.72);
+  border-radius: 13px;
+  padding: 8px;
+  background: rgba(255, 253, 248, 0.74);
+}
+
+.runtimeProjectFile.role-relevant {
+  border-color: rgba(231, 111, 46, 0.26);
+}
+
+.runtimeProjectFile.role-read-next {
+  border-color: rgba(35, 133, 83, 0.28);
+  background: rgba(35, 133, 83, 0.06);
+}
+
+.runtimeProjectFile strong,
+.runtimeProjectFile span,
+.runtimeProjectFile em {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtimeProjectFile strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.runtimeProjectFile span {
+  margin-top: 2px;
+  color: #747a70;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.runtimeProjectFile em {
+  margin-top: 3px;
+  color: #8a6a55;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.runtimeProjectActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.runtimeProjectActions button {
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 0 9px;
+  color: #3d4139;
+  background: #fffefa;
+  font-size: 11px;
+  font-weight: 820;
+  cursor: pointer;
+}
+
+.runtimeProjectActions button:hover {
+  border-color: var(--border-strong);
+}
+
+.projectRuntimeGrid span,
+.projectHero span,
+.projectSectionHead span,
+.projectStats em,
+.projectContextTile em,
+.projectFilePreview summary,
+.projectFileItem span,
+.projectFileItem em,
+.projectFileEmpty,
+.projectCompetenceItem span,
+.projectCompetenceItem em,
+.projectEmptyState span,
+.runtimeProjectRuntime span,
+.runtimeProjectSessions span,
+.runtimeProjectFiles p,
+.runtimeProjectFile span,
+.runtimeProjectFile em {
+  color: #aaa49b;
+}
+
+.projectRuntimeGrid strong,
+.projectFileItem strong,
+.projectCompetenceItem strong,
+.projectEmptyState strong,
+.runtimeProjectHead strong,
+.runtimeProjectFile strong {
+  color: #f0ebe2;
+}
+
+.projectFileSearch,
+.projectFilesHead button,
+.projectFileItem button,
+.projectFileMetaChips span,
+.projectFilePreview pre,
+.projectFileEmpty,
+.projectCompetenceStats span,
+.projectCompetenceDomains span,
+.projectCompetenceItem,
+.projectEmptyState,
+.runtimeProjectContext,
+.runtimeProjectRuntime,
+.runtimeProjectSessions,
+.runtimeProjectCompetences,
+.runtimeProjectFile {
+  border-color: rgba(255, 255, 255, 0.10);
+  background: #30302f;
+}
+
+.projectFileSearch {
+  color: #eee8df;
+}
+
+.projectFilesHead button,
+.projectFileItem button,
+.projectEmptyState button,
+.runtimeProjectActions button {
+  color: #e8e2d8;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #333331;
+}
+
+.projectFilesHead button:hover,
+.projectFileItem button:hover,
+.projectEmptyState button:hover,
+.runtimeProjectActions button:hover {
+  border-color: rgba(217, 119, 76, 0.34);
+  background: #3a3937;
+}
+
+.projectFileItem {
+  border-color: rgba(255, 255, 255, 0.10);
+  background: #2b2b2a;
+}
+
+.projectFilePreview p,
+.projectFilePreview pre {
+  color: #d6d0c7;
+}
+
+.projectCompetenceItem.builtIn,
+.runtimeProjectFile.role-relevant {
+  border-color: rgba(217, 119, 76, 0.24);
+  background: rgba(217, 119, 76, 0.10);
+}
+
+.runtimeProjectFile.role-read-next {
+  border-color: rgba(121, 184, 139, 0.28);
+  background: rgba(121, 184, 139, 0.10);
+}

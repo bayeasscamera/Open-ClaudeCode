@@ -1,0 +1,86 @@
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(5, 5, 5, 0.70);
+  backdrop-filter: blur(14px);
+  -webkit-app-region: no-drag;
+}
+
+.modalBackdrop.hidden {
+  display: none;
+}
+
+.projectModal {
+  width: min(620px, 100%);
+  max-height: min(760px, calc(100vh - 44px));
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-top: 5px solid var(--accent);
+  border-radius: 18px;
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+  background: linear-gradient(180deg, #1a1918 0%, #24211f 46%, #171716 100%);
+  box-shadow: var(--shadow-strong);
+}
+
+.projectModalHeader span {
+  color: var(--accent-2);
+  font-size: 11px;
+  font-weight: 860;
+  text-transform: uppercase;
+}
+
+.projectModalHeader h2 {
+  margin: 4px 0 0;
+  color: #f0ebe2;
+  font-size: 24px;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.modalField {
+  display: grid;
+  gap: 7px;
+}
+
+.modalField span {
+  color: #aaa49b;
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.modalField input,
+.modalField textarea {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 10px 11px;
+  background: linear-gradient(180deg, #514f4b 0%, #3f3e3b 100%);
+  color: var(--text);
+}
+
+.modalField input {
+  height: 42px;
+}
+
+.modalField textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.modalField input:focus,
+.modalField textarea:focus {
+  border-color: rgba(231, 111, 46, 0.44);
+  box-shadow: 0 0 0 3px rgba(231, 111, 46, 0.12);
+}
+
+.projectModalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding-top: 2px;
+}

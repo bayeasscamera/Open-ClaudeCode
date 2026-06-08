@@ -1,0 +1,70 @@
+{
+  "name": "opc-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fast desktop shell for OPC CLI",
+  "author": "OPC Contributors",
+  "main": "electron/main.cjs",
+  "type": "commonjs",
+  "scripts": {
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "prepackage:mac": "npm run verify",
+    "package:mac": "env -u ELECTRON_RUN_AS_NODE electron-builder --mac dir",
+    "install:applications": "node scripts/installApplications.cjs",
+    "open:applications": "node scripts/openApplications.cjs",
+    "release:local": "npm run package:mac && npm run install:applications -- --open",
+    "audit:security": "npm audit --audit-level=moderate --omit=optional",
+    "typecheck:refactor": "npm --prefix .. run typecheck:refactor",
+    "test": "node --test test/*.test.cjs",
+    "test:ui": "node test/electronSmoke.cjs",
+    "test:visual": "node test/electronVisualSmoke.cjs",
+    "verify:ci": "npm run audit:security && npm run typecheck:refactor && npm test",
+    "verify": "npm run typecheck:refactor && npm test && npm run test:ui && npm run test:visual"
+  },
+  "devDependencies": {
+    "electron": "^39.8.10",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "app.opc.desktop",
+    "productName": "OPC",
+    "asar": true,
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../package",
+        "to": "opc/package",
+        "filter": [
+          "**/*",
+          "!cli.js.map",
+          "!bun.lock",
+          "!README.md"
+        ]
+      },
+      {
+        "from": "../plugins",
+        "to": "opc/plugins",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../examples",
+        "to": "opc/examples",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "category": "public.app-category.developer-tools"
+    }
+  }
+}

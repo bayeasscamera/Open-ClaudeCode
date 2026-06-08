@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self' http://127.0.0.1:*"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OPC</title>
+    <link rel="stylesheet" href="./css/activity.css" />
+    <link rel="stylesheet" href="./css/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside class="sidebar">
+        <div class="windowTraffic" aria-hidden="true">
+          <span class="trafficClose"></span>
+          <span class="trafficMinimize"></span>
+          <span class="trafficZoom"></span>
+        </div>
+        <div class="workspaceTabs" aria-label="Modes OPC">
+          <button class="workspaceTab active" type="button"><span aria-hidden="true">◌</span> Chat</button>
+        </div>
+        <div class="brand">
+          <img class="logo" src="./assets/opc-logo.svg" alt="OPC" />
+          <div class="brandText">
+            <strong>OPC</strong>
+            <span>Desktop CLI</span>
+          </div>
+        </div>
+        <button id="newChat" class="primaryButton"><span aria-hidden="true">+</span> Nouveau chat</button>
+        <button id="newProject" class="sidebarSecondaryButton" type="button" title="Créer un projet">
+          <span aria-hidden="true">▱</span> Projet
+        </button>
+        <div class="sidebarSearch">
+          <input id="sidebarSearch" type="search" aria-label="Rechercher projets ou sessions" placeholder="Rechercher projets ou sessions" />
+        </div>
+        <div id="pinnedHeader" class="sectionHeader pinnedHeader">
+          <div class="sectionTitle">Pinned <span aria-hidden="true">⌄</span></div>
+        </div>
+        <div id="pinnedChatList" class="pinnedChatList" role="list" aria-label="Sessions épinglées"></div>
+        <div class="sectionHeader projectHeader">
+          <div class="sectionTitle">Projets</div>
+        </div>
+        <div id="projectList" class="projectList" role="list" aria-label="Projets OPC"></div>
+        <div class="sectionHeader">
+          <div class="sectionTitle">Recents</div>
+          <button id="clearHistory" class="textButton" title="Effacer tout l'historique">Tout effacer</button>
+        </div>
+        <div id="chatList" class="chatList" role="list" aria-label="Sessions récentes"></div>
+        <div class="statusCard">
+          <span id="healthDot" class="dot pending"></span>
+          <div>
+            <strong id="healthText">Vérification</strong>
+            <span id="healthDetail">CLI OPC</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="topbarDragZone" aria-hidden="true"></div>
+          <div class="planBadge" aria-label="Forfait OPC">OPC Local <span>Free</span></div>
+          <div class="topbarControls">
+            <div class="field cwdField">
+              <label for="cwdInput">Dossier</label>
+              <input id="cwdInput" spellcheck="false" />
+            </div>
+            <div class="field projectField">
+              <label for="projectSelect">Projet</label>
+              <select id="projectSelect"></select>
+            </div>
+            <div class="field modelField">
+              <label for="modelInput">Modèle</label>
+              <select id="modelInput"></select>
+            </div>
+            <div class="field permissionField">
+              <label for="permissionSelect">Permissions</label>
+              <select id="permissionSelect">
+                <option value="acceptEdits">Autoriser éditions</option>
+                <option value="auto">Auto</option>
+                <option value="dontAsk">Ne pas demander</option>
+                <option value="plan">Plan seulement</option>
+                <option value="default">Standard</option>
+                <option value="bypassPermissions">Tout autoriser (dangereux)</option>
+              </select>
+            </div>
+            <div class="field memoryField">
+              <label for="memoryToggle">Mémoire</label>
+              <label class="toggleControl">
+                <input id="memoryToggle" type="checkbox" checked />
+                <span>Active</span>
+              </label>
+            </div>
+          </div>
+          <button id="providerCheck" class="iconButton" title="Tester le modèle sélectionné">✓</button>
+          <button id="thinkToggle" class="thinkButton" type="button" aria-pressed="false" title="Activer Think">Think</button>
+          <div class="windowDragHandle" title="Déplacer la fenêtre" aria-hidden="true"></div>
+          <button id="settingsToggle" class="iconButton" title="Réglages">⚙</button>
+          <button id="logsToggle" class="iconButton" title="Logs">≡</button>
+        </header>
+
+        <section id="messages" class="messages" role="log" aria-live="polite" aria-label="Conversation OPC"></section>
+
+        <footer class="composer">
+          <div class="composerBox">
+            <textarea id="promptInput" rows="1" aria-label="Message à envoyer à OPC" placeholder="Comment puis-je vous aider ?"></textarea>
+            <div class="composerActions">
+              <div class="composerMenuWrap">
+                <button id="composerPlusButton" class="composerPlusButton" type="button" title="Ajouter au chat" aria-haspopup="menu" aria-expanded="false">+</button>
+                <div id="composerMenu" class="composerMenu hidden" role="menu" aria-label="Ajouter au chat">
+                  <button id="composerAddFolder" class="composerMenuItem" type="button" role="menuitem">
+                    <span aria-hidden="true">▱</span>
+                    <span>
+                      <strong>Ajouter un dossier</strong>
+                      <small>Utiliser ce répertoire pour OPC</small>
+                    </span>
+                  </button>
+                </div>
+              </div>
+              <div class="composerActionGroup">
+                <select id="composerModelInput" class="composerModelSelect" title="Modèle"></select>
+                <button id="refineUndoButton" class="refineUndoButton hidden" type="button" title="Annuler le dernier raffinage">↶</button>
+                <button id="refineButton" class="refineButton" type="button" title="Raffiner le prompt">✦</button>
+                <button id="rescueButton" class="rescueButton" type="button" title="Préparer une tâche OPC Rescue">Rescue</button>
+                <button id="stopButton" class="stopButton" type="button" title="Arrêter la tâche en cours" aria-label="Arrêter la tâche en cours" disabled>Stop</button>
+                <button id="sendButton" class="sendButton" type="button" title="Envoyer le message" aria-label="Envoyer le message" disabled>↑</button>
+              </div>
+            </div>
+            <div id="composerStatus" class="composerStatus hidden" aria-live="polite"></div>
+          </div>
+          <div class="promptPresets" aria-label="Modes de prompt">
+            <button type="button">Écrire</button>
+            <button type="button">Apprendre</button>
+            <button type="button">Code</button>
+            <button type="button">Cowork</button>
+          </div>
+        </footer>
+      </main>
+
+      <aside id="logsPanel" class="logsPanel hidden" aria-label="Inspecteur OPC">
+        <div class="logsHeader">
+          <strong>Inspecteur</strong>
+          <div class="logsHeaderActions">
+            <button id="checkAllProviders" class="ghostButton">Tester</button>
+            <button id="clearLogs" class="ghostButton">Effacer</button>
+          </div>
+        </div>
+        <section id="providerPanel" class="inspectorSection"></section>
+        <section id="taskPanel" class="inspectorSection"></section>
+        <div class="inspectorLogTitle">Flux CLI</div>
+        <pre id="logs" aria-live="polite"></pre>
+      </aside>
+    </div>
+
+    <div id="settingsModal" class="settingsBackdrop hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <section class="settingsDialog">
+        <header class="settingsHeader">
+          <div class="settingsHeaderTitle">
+            <span>OPC Desktop</span>
+            <h2 id="settingsTitle">Réglages</h2>
+          </div>
+          <button id="settingsClose" class="iconButton" type="button" title="Fermer">×</button>
+          <div class="settingsCommandBar">
+            <label class="settingsSearch" for="settingsSearchInput">
+              <span>Recherche</span>
+              <input id="settingsSearchInput" type="search" autocomplete="off" placeholder="Rechercher un réglage, provider, projet..." />
+            </label>
+            <div id="settingsOverview" class="settingsOverview" aria-label="Aperçu des réglages"></div>
+          </div>
+        </header>
+
+        <div class="settingsContent">
+          <nav class="settingsNav" aria-label="Sections des réglages">
+            <button class="active" type="button" data-settings-tab="general">Général</button>
+            <button type="button" data-settings-tab="providers">Providers</button>
+            <button type="button" data-settings-tab="environment">Environnement</button>
+            <button type="button" data-settings-tab="project">Projet</button>
+            <button type="button" data-settings-tab="data">Données</button>
+            <button type="button" data-settings-tab="doctor">Doctor</button>
+            <button type="button" data-settings-tab="interface">Interface</button>
+          </nav>
+
+          <div class="settingsPanels">
+            <div id="settingsSearchEmpty" class="settingsSearchEmpty hidden">
+              Aucun réglage ne correspond à cette recherche.
+            </div>
+            <section class="settingsPanel active" data-settings-panel="general">
+              <div class="settingsSectionTitle">
+                <span>Runtime global</span>
+                <strong>Dossier, modèle, permissions et mémoire utilisés par défaut.</strong>
+              </div>
+              <label class="settingsField wide">
+                <span>Dossier de travail</span>
+                <input id="settingsCwdInput" spellcheck="false" />
+              </label>
+              <div class="settingsGrid">
+                <label class="settingsField">
+                  <span>Modèle</span>
+                  <select id="settingsModelInput"></select>
+                </label>
+                <label class="settingsField">
+                  <span>Raffinage</span>
+                  <select id="settingsRefineModelInput"></select>
+                </label>
+                <label class="settingsField">
+                  <span>Permissions</span>
+                  <select id="settingsPermissionSelect">
+                    <option value="acceptEdits">Autoriser éditions</option>
+                    <option value="auto">Auto</option>
+                    <option value="dontAsk">Ne pas demander</option>
+                    <option value="plan">Plan seulement</option>
+                    <option value="default">Standard</option>
+                    <option value="bypassPermissions">Tout autoriser (dangereux)</option>
+                  </select>
+                </label>
+              </div>
+              <div class="settingsControlGrid">
+                <label class="settingsSwitch settingsSwitchCompact">
+                  <input id="settingsMemoryToggle" type="checkbox" />
+                  <span>
+                    <strong>Mémoire durable</strong>
+                    <em>Injecter les notes et sessions utiles dans les prochaines réponses.</em>
+                  </span>
+                </label>
+                <label class="settingsSwitch settingsSwitchCompact">
+                  <input id="settingsProviderAutoRouterToggle" type="checkbox" />
+                  <span>
+                    <strong>Auto-router provider</strong>
+                    <em>Basculer vers un fallback compatible après échecs répétés.</em>
+                  </span>
+                </label>
+                <label class="settingsField settingsFieldCompact">
+                  <span>Seuil auto-router</span>
+                  <input id="settingsProviderAutoRouterThreshold" type="number" min="1" max="5" step="1" />
+                </label>
+                <label class="settingsSwitch settingsSwitchCompact">
+                  <input id="settingsAdvancedPermissionStrictToggle" type="checkbox" />
+                  <span>
+                    <strong>Permissions strictes</strong>
+                    <em>Bloquer les actions critiques au lieu de seulement les contrôler.</em>
+                  </span>
+                </label>
+                <label class="settingsSwitch settingsSwitchCompact settingsControlWide">
+                  <input id="settingsThinkToggle" type="checkbox" />
+                  <span>
+                    <strong>Mode Think</strong>
+                    <em>Augmente l’effort de raisonnement quand tu veux une analyse plus profonde.</em>
+                  </span>
+                </label>
+              </div>
+              <div class="settingsActions">
+                <button id="settingsApplyGeneral" class="primaryButton compact" type="button">Appliquer</button>
+                <button id="settingsOpenFolder" class="secondaryButton" type="button">Ouvrir dossier</button>
+              </div>
+            </section>
+
+            <section class="settingsPanel" data-settings-panel="providers">
+              <div class="settingsSectionTitle">
+                <span>Providers & modèles</span>
+                <strong>OPC utilise uniquement NVIDIA et Ollama. Les protocoles restent OpenAI-compatible ou Anthropic messages selon le modèle.</strong>
+              </div>
+              <div class="settingsActions">
+                <button id="settingsAddProvider" class="primaryButton compact" type="button">Ajouter provider</button>
+                <button id="settingsAddOllamaProvider" class="secondaryButton" type="button">Ajouter Ollama</button>
+                <button id="settingsTestModel" class="primaryButton compact" type="button">Tester sélection</button>
+                <button id="settingsTestAllProviders" class="secondaryButton" type="button">Tester tous</button>
+                <button id="settingsRepairProviders" class="secondaryButton" type="button">Réparer + retester</button>
+                <button id="settingsDiscoverProviders" class="secondaryButton" type="button">Découvrir /models</button>
+                <button id="settingsQuarantineProviders" class="secondaryButton" type="button">Pause erreurs</button>
+                <button id="settingsRefreshProviders" class="secondaryButton" type="button">Rafraîchir</button>
+                <button id="settingsExportProviders" class="secondaryButton" type="button">Copier JSON sans clés</button>
+                <button id="settingsImportProviders" class="secondaryButton" type="button">Importer JSON</button>
+              </div>
+              <div id="settingsProviderSummary" class="settingsMetricGrid"></div>
+              <div id="settingsProviderActionStatus" class="settingsInlineStatus hidden"></div>
+              <div id="settingsProviderRepairLog" class="settingsRepairLog hidden"></div>
+              <div id="settingsProviderEventJournal" class="settingsProviderHistory"></div>
+              <div id="settingsProviderHistory" class="settingsProviderHistory"></div>
+              <form id="settingsProviderEditor" class="settingsProviderEditor hidden">
+                <div class="settingsProviderEditorHeader">
+                  <div>
+                    <span>Éditeur provider · Extra body JSON</span>
+                    <strong id="settingsProviderEditorTitle">Nouveau provider</strong>
+                  </div>
+                  <button id="settingsProviderCancel" class="iconButton" type="button" title="Fermer">×</button>
+                </div>
+                <div id="settingsProviderEditorError" class="settingsInlineError hidden"></div>
+                <div class="settingsGrid">
+                  <label class="settingsField">
+                    <span>Nom affiché</span>
+                    <input id="settingsProviderLabel" autocomplete="off" />
+                  </label>
+                  <label class="settingsField">
+                    <span>Modèle</span>
+                    <input id="settingsProviderModel" autocomplete="off" spellcheck="false" required />
+                  </label>
+                  <label class="settingsField">
+                    <span>Provider</span>
+                    <input id="settingsProviderName" autocomplete="off" spellcheck="false" placeholder="NVIDIA, Ollama, Local..." />
+                  </label>
+                  <label class="settingsField">
+                    <span>Base URL</span>
+                    <input id="settingsProviderBaseUrl" autocomplete="off" spellcheck="false" placeholder="https://.../v1" required />
+                  </label>
+                </div>
+                <div class="settingsGrid">
+                  <label class="settingsField">
+                    <span>API</span>
+                    <select id="settingsProviderUpstreamApi">
+                      <option value="openai">OpenAI compatible</option>
+                      <option value="anthropic">Anthropic messages</option>
+                      <option value="ollama">Ollama local</option>
+                    </select>
+                  </label>
+                  <label class="settingsField">
+                    <span>Transport</span>
+                    <select id="settingsProviderTransport">
+                      <option value="stream">Streaming</option>
+                      <option value="buffered">Bufferisé</option>
+                    </select>
+                  </label>
+                  <label class="settingsField">
+                    <span>Timeout ms</span>
+                    <input id="settingsProviderTimeout" type="number" min="1000" max="1800000" step="1000" />
+                  </label>
+                  <label class="settingsField">
+                    <span>Test timeout ms</span>
+                    <input id="settingsProviderCheckTimeout" type="number" min="5000" max="300000" step="1000" />
+                  </label>
+                  <label class="settingsField">
+                    <span>Retries</span>
+                    <input id="settingsProviderRetries" type="number" min="0" max="10" step="1" />
+                  </label>
+                </div>
+                <div class="settingsGrid">
+                  <label class="settingsField">
+                    <span>Max tokens</span>
+                    <input id="settingsProviderMaxTokens" type="number" min="1" max="2000000" step="1" />
+                  </label>
+                  <label class="settingsField">
+                    <span>Clé API</span>
+                    <input id="settingsProviderApiKey" type="password" autocomplete="new-password" placeholder="laisser vide pour conserver" />
+                  </label>
+                </div>
+                <div class="settingsGrid">
+                  <label class="settingsSwitch">
+                    <input id="settingsProviderNoAuth" type="checkbox" />
+                    <span>
+                      <strong>Sans authentification</strong>
+                      <em>Pour les providers locaux qui n’exigent aucune clé.</em>
+                    </span>
+                  </label>
+                  <label class="settingsSwitch">
+                    <input id="settingsProviderDefault" type="checkbox" />
+                    <span>
+                      <strong>Modèle par défaut</strong>
+                      <em>Utiliser ce provider pour les nouvelles sessions.</em>
+                    </span>
+                  </label>
+                </div>
+                <label class="settingsField wide">
+                  <span>Préfixe système</span>
+                  <textarea id="settingsProviderSystemPrefix" rows="3" spellcheck="false"></textarea>
+                </label>
+                <label class="settingsField wide">
+                  <span>Extra body JSON</span>
+                  <textarea id="settingsProviderExtraBody" rows="3" spellcheck="false" placeholder='{"temperature":0}'></textarea>
+                </label>
+                <div class="settingsCapabilityBlock">
+                  <div class="settingsCapabilityHeader">
+                    <span>Capacités du modèle</span>
+                    <strong>Déclare ce que ce modèle supporte réellement pour que OPC n’envoie pas de paramètres incompatibles.</strong>
+                  </div>
+                  <div class="settingsCapabilityGrid">
+                    <label class="settingsCapability">
+                      <input id="settingsProviderCapabilityAgent" type="checkbox" />
+                      <span><strong>Agent CLI</strong><em>Utilisable dans le chat principal.</em></span>
+                    </label>
+                    <label class="settingsCapability">
+                      <input id="settingsProviderCapabilitySystem" type="checkbox" />
+                      <span><strong>Système</strong><em>Accepte les messages système.</em></span>
+                    </label>
+                    <label class="settingsCapability">
+                      <input id="settingsProviderCapabilityStreaming" type="checkbox" />
+                      <span><strong>Streaming</strong><em>Flux token par token.</em></span>
+                    </label>
+                    <label class="settingsCapability">
+                      <input id="settingsProviderCapabilityTools" type="checkbox" />
+                      <span><strong>Outils</strong><em>Bash, Read, Edit, Web.</em></span>
+                    </label>
+                    <label class="settingsCapability">
+                      <input id="settingsProviderCapabilityToolChoice" type="checkbox" />
+                      <span><strong>Tool choice</strong><em>Choix d’outil explicite.</em></span>
+                    </label>
+                    <label class="settingsCapability">
+                      <input id="settingsProviderCapabilityTemperature" type="checkbox" />
+                      <span><strong>Température</strong><em>Paramètre sampling accepté.</em></span>
+                    </label>
+                    <label class="settingsCapability">
+                      <input id="settingsProviderCapabilityThinking" type="checkbox" />
+                      <span><strong>Think</strong><em>Paramètre thinking supporté.</em></span>
+                    </label>
+                    <label class="settingsCapability">
+                      <input id="settingsProviderCapabilityRefine" type="checkbox" />
+                      <span><strong>Raffinage</strong><em>Disponible pour le bouton étoile.</em></span>
+                    </label>
+                    <label class="settingsCapability">
+                      <input id="settingsProviderCapabilityReasoningPassThrough" type="checkbox" />
+                      <span><strong>Reasoning relay</strong><em>Retourne le raisonnement provider.</em></span>
+                    </label>
+                    <label class="settingsCapability">
+                      <input id="settingsProviderCapabilityReasoningExclude" type="checkbox" />
+                      <span><strong>Reasoning exclude</strong><em>Force l’exclusion reasoning.</em></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="settingsActions">
+                  <button id="settingsProviderSave" class="primaryButton compact" type="submit">Enregistrer</button>
+                  <button id="settingsProviderDelete" class="dangerButton" type="button">Supprimer</button>
+                </div>
+              </form>
+              <section id="settingsProviderImportPanel" class="settingsProviderImport hidden">
+                <div class="settingsProviderEditorHeader">
+                  <div>
+                    <span>Import provider</span>
+                    <strong>JSON de profil ou configuration OPC</strong>
+                  </div>
+                  <button id="settingsProviderImportCancel" class="iconButton" type="button" title="Fermer">×</button>
+                </div>
+                <div id="settingsProviderImportError" class="settingsInlineError hidden"></div>
+                <label class="settingsField wide">
+                  <span>JSON à importer</span>
+                  <textarea id="settingsProviderImportText" rows="8" spellcheck="false" placeholder='{"profiles":[{"label":"Local","model":"local/model","baseUrl":"http://localhost:8317/v1","noAuth":true}]}'></textarea>
+                </label>
+                <div class="settingsActions">
+                  <button id="settingsProviderImportSave" class="primaryButton compact" type="button">Importer</button>
+                  <button id="settingsProviderImportPaste" class="secondaryButton" type="button">Coller presse-papiers</button>
+                </div>
+              </section>
+              <div id="settingsProviderList" class="settingsProviderList"></div>
+            </section>
+
+            <section class="settingsPanel" data-settings-panel="environment">
+              <div class="settingsSectionTitle">
+                <span>Environnement local</span>
+                <strong>État du CLI, du bridge provider, de la mémoire et des outils embarqués.</strong>
+              </div>
+              <div id="settingsEnvironmentSummary" class="settingsMetricGrid settingsEnvironmentSummary"></div>
+              <div id="settingsEnvironmentStack" class="settingsEnvironmentStack"></div>
+              <div class="settingsActions">
+                <button id="settingsEnvironmentDoctor" class="primaryButton compact" type="button">Lancer Doctor</button>
+                <button id="settingsEnvironmentRepair" class="secondaryButton" type="button">Réparer providers</button>
+                <button id="settingsEnvironmentRefresh" class="secondaryButton" type="button">Rafraîchir runtime</button>
+              </div>
+            </section>
+
+            <section class="settingsPanel" data-settings-panel="project">
+              <div class="settingsSectionTitle">
+                <span>Projet actif</span>
+                <strong>Réglages, mémoire, instructions et conversations liés au projet courant.</strong>
+              </div>
+              <div id="settingsProjectSummary" class="settingsProjectCard"></div>
+              <div class="settingsActions">
+                <button id="settingsApplyProjectRuntime" class="primaryButton compact" type="button">Appliquer runtime</button>
+                <button id="settingsSaveProjectRuntime" class="secondaryButton" type="button">Mémoriser runtime</button>
+                <button id="settingsNewProject" class="secondaryButton" type="button">Nouveau projet</button>
+                <button id="settingsNewChat" class="secondaryButton" type="button">Nouveau chat</button>
+              </div>
+            </section>
+
+            <section class="settingsPanel" data-settings-panel="data">
+              <div class="settingsSectionTitle">
+                <span>Données</span>
+                <strong>Sessions, projets, sauvegarde locale et actions d’import/export.</strong>
+              </div>
+              <div id="settingsDataSummary" class="settingsMetricGrid"></div>
+              <div id="settingsDataStatus" class="settingsInlineStatus hidden"></div>
+              <div class="settingsDangerZone">
+                <div>
+                  <strong>Historique des conversations</strong>
+                  <span>Efface les sessions visibles. Les projets restent disponibles.</span>
+                </div>
+                <button id="settingsClearHistory" class="dangerButton" type="button">Tout effacer</button>
+              </div>
+              <div class="settingsActions">
+                <button id="settingsExportProject" class="secondaryButton" type="button">Exporter projet</button>
+                <button id="settingsImportProject" class="secondaryButton" type="button">Importer projet</button>
+                <button id="settingsExportStateBackup" class="secondaryButton" type="button">Exporter sauvegarde</button>
+                <button id="settingsImportStateBackup" class="secondaryButton" type="button">Importer sauvegarde</button>
+              </div>
+            </section>
+
+            <section class="settingsPanel" data-settings-panel="doctor">
+              <div class="settingsSectionTitle">
+                <span>OPC Doctor</span>
+                <strong>Vérifie en une passe le CLI, le provider sélectionné, le runtime, la mémoire, git et l’app installée.</strong>
+              </div>
+              <div id="settingsDoctorSummary" class="settingsMetricGrid"></div>
+              <div class="settingsActions">
+                <button id="settingsRunDoctor" class="primaryButton compact" type="button">Lancer diagnostic</button>
+                <button id="settingsDoctorRepairProviders" class="secondaryButton" type="button">Réparer providers</button>
+                <button id="settingsCopyDoctor" class="secondaryButton" type="button" disabled>Copier rapport</button>
+                <button id="settingsExportSupportBundle" class="secondaryButton" type="button">Exporter bundle support</button>
+              </div>
+              <div id="settingsDoctorReport" class="settingsDoctorReport"></div>
+            </section>
+
+            <section class="settingsPanel" data-settings-panel="interface">
+              <div class="settingsSectionTitle">
+                <span>Interface</span>
+                <strong>Confort visuel, inspecteur et densité d’affichage.</strong>
+              </div>
+              <label class="settingsSwitch">
+                <input id="settingsCompactToggle" type="checkbox" />
+                <span>
+                  <strong>Mode compact</strong>
+                  <em>Réduit légèrement les espacements pour afficher plus d’informations.</em>
+                </span>
+              </label>
+              <label class="settingsSwitch">
+                <input id="settingsInspectorToggle" type="checkbox" />
+                <span>
+                  <strong>Inspecteur visible</strong>
+                  <em>Garder le panneau logs/providers ouvert entre les sessions.</em>
+                </span>
+              </label>
+              <label class="settingsField">
+                <span>Taille du texte</span>
+                <select id="settingsTextSizeSelect">
+                  <option value="small">Small</option>
+                  <option value="medium">Medium</option>
+                  <option value="large">Large</option>
+                </select>
+              </label>
+              <div class="settingsActions">
+                <button id="settingsApplyInterface" class="primaryButton compact" type="button">Appliquer interface</button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="projectModal" class="modalBackdrop hidden" role="dialog" aria-modal="true" aria-labelledby="projectModalTitle">
+      <form id="projectForm" class="projectModal">
+        <div class="projectModalHeader">
+          <span>Projet OPC</span>
+          <h2 id="projectModalTitle">Nouveau projet</h2>
+        </div>
+        <label class="modalField">
+          <span>Nom</span>
+          <input id="projectNameInput" maxlength="80" autocomplete="off" required />
+        </label>
+        <label class="modalField">
+          <span>Description</span>
+          <textarea id="projectDescriptionInput" rows="2" maxlength="240" placeholder="Objectif court du projet"></textarea>
+        </label>
+        <label class="modalField">
+          <span>Mémoire</span>
+          <textarea id="projectMemoryInput" rows="4" placeholder="Faits durables, préférences, décisions propres à ce projet"></textarea>
+        </label>
+        <label class="modalField">
+          <span>Instructions</span>
+          <textarea id="projectInstructionsInput" rows="4" placeholder="Règles et contraintes que le CLI doit suivre dans ce projet"></textarea>
+        </label>
+        <div class="projectModalActions">
+          <button id="projectCancel" type="button" class="secondaryButton">Annuler</button>
+          <button id="projectSave" type="submit" class="primaryButton compact">Créer</button>
+        </div>
+      </form>
+    </div>
+
+    <script src="./state/stateRules.js"></script>
+    <script src="./state/agentTaskLedger.js"></script>
+    <script src="./state/agentToolRegistry.js"></script>
+    <script src="./state/agentToolEvidence.js"></script>
+    <script src="./state/agentVerificationEngine.js"></script>
+    <script src="./state/agentContextBudget.js"></script>
+    <script src="./state/agentProviderRouter.js"></script>
+    <script src="./state/agentToolPlanner.js"></script>
+    <script src="./state/agentTaskStepEngine.js"></script>
+    <script src="./state/agentWorkerRuntime.js"></script>
+    <script src="./state/agentRuntimeProfile.js"></script>
+    <script src="./state/agentStepRunner.js"></script>
+    <script src="./state/taskCheckpointStore.js"></script>
+    <script src="./state/taskCheckpointSummarizer.js"></script>
+    <script src="./state/providerFailurePolicy.js"></script>
+    <script src="./state/providerRuntimeDiagnostics.js"></script>
+    <script src="./state/runtimeQualityDashboard.js"></script>
+    <script src="./state/agenticEvaluationScenarios.js"></script>
+    <script src="./state/stateRepository.js"></script>
+    <script src="./state/stateStore.js"></script>
+    <script src="./state/projectFileIndex.js"></script>
+    <script src="./state/competenceProfile.js"></script>
+    <script src="./state/projectRuntimeContext.js"></script>
+    <script src="./state/builtInSkills.js"></script>
+    <script src="./state/commandPolicy.js"></script>
+    <script src="./state/agentContract.js"></script>
+    <script src="./services/speedReader.js"></script>
+    <script src="./services/activity.js"></script>
+    <script src="./services/completionGuard.js"></script>
+    <script src="./state/conversationContext.js"></script>
+    <script src="./services/providerIssueRules.js"></script>
+    <script src="./services/providerHealth.js"></script>
+    <script src="./state/taskManager.js"></script>
+    <script src="./services/markdownRenderer.js"></script>
+    <script src="./views/inspectorView.js"></script>
+    <script src="./controllers/chatController.js"></script>
+    <script src="./controllers/projectController.js"></script>
+    <script src="./controllers/projectFileController.js"></script>
+    <script src="./controllers/serviceController.js"></script>
+    <script src="./controllers/providerController.js"></script>
+    <script src="./state/runtimeDiagnostics.js"></script>
+    <script src="./state/runRuntimeState.js"></script>
+    <script src="./state/runAudit.js"></script>
+    <script src="./state/workspaceTrust.js"></script>
+    <script src="./state/advancedPermissionPolicy.js"></script>
+    <script src="./state/runRequestPlanner.js"></script>
+    <script src="./state/runTaskPlanner.js"></script>
+    <script src="./state/runTaskQueue.js"></script>
+    <script src="./state/runResumeRecovery.js"></script>
+    <script src="./controllers/runController.js"></script>
+    <script src="./controllers/promptComposerController.js"></script>
+    <script src="./services/messageScroll.js"></script>
+    <script src="./services/renderScheduler.js"></script>
+    <script src="./services/logBuffer.js"></script>
+    <script src="./ports/opcClient.js"></script>
+    <script src="./views/toolView.js"></script>
+    <script src="./services/messageActions.js"></script>
+    <script src="./views/sidebarView.js"></script>
+    <script src="./views/runtimeContextView.js"></script>
+    <script src="./views/projectContextView.js"></script>
+    <script src="./views/messageView.js"></script>
+    <script src="./services/settingsHelpers.js"></script>
+    <script src="./services/providerPanelViewModel.js"></script>
+    <script src="./services/providerEditorModel.js"></script>
+    <script src="./services/settingsProviderPanel.js"></script>
+    <script src="./controllers/settingsController.js"></script>
+    <script src="./controllers/renderController.js"></script>
+    <script src="./services/reportSelection.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "allowJs": false,
+    "checkJs": false,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "lib": [
+      "ES2023",
+      "ES2023.Intl",
+      "DOM"
+    ],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "target": "ES2023",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src/typecheck/**/*.d.ts",
+    "src/query/recoveryPolicy.ts",
+    "src/bridge/bridgeArgs.ts",
+    "src/bridge/bridgeErrors.ts",
+    "src/bridge/bridgeFatalError.ts",
+    "src/bridge/bridgeHeartbeat.ts",
+    "src/bridge/bridgePollBackoff.ts",
+    "src/bridge/bridgeRetry.ts",
+    "src/bridge/bridgeSessionLifecycle.ts",
+    "src/bridge/bridgeSessionSpawn.ts",
+    "src/bridge/bridgeSessionStatus.ts",
+    "src/bridge/bridgeSessionTitle.ts",
+    "src/bridge/bridgeStopWork.ts",
+    "src/bridge/sessionTitle.ts"
+  ]
+}

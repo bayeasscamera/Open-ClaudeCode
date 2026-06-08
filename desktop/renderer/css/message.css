@@ -1,0 +1,414 @@
+.message {
+  width: min(100%, var(--content-max));
+  margin: 0 auto 24px;
+}
+
+.message.user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+.bubble {
+  border-radius: 15px;
+  padding: 13px 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  cursor: text;
+  outline: none;
+  caret-color: transparent;
+}
+
+.bubble:focus {
+  outline: 2px solid rgba(231, 111, 46, 0.16);
+  outline-offset: 4px;
+}
+
+.user .bubble {
+  max-width: min(68%, 720px);
+  color: #f2ede4;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(53, 53, 51, 0.32);
+  box-shadow: none;
+  backdrop-filter: blur(8px);
+}
+
+.assistant .bubble {
+  max-width: 1040px;
+  border: 1px solid rgba(255, 255, 255, 0.045);
+  border-left: 2px solid rgba(231, 111, 46, 0.38);
+  padding: 17px 19px;
+  background: rgba(40, 40, 39, 0.18);
+  color: #e9e4db;
+  box-shadow: none;
+  backdrop-filter: blur(8px);
+}
+
+.assistant .bubble.markdownBody {
+  font-size: 15px;
+  line-height: 1.62;
+}
+
+.textSizeSmall .bubble,
+.textSizeSmall .assistant .bubble.markdownBody,
+.textSizeSmall .assistant .bubble.reportRich > p:first-child {
+  font-size: 14px;
+}
+
+.textSizeSmall .bubble h2 {
+  font-size: 18px;
+}
+
+.textSizeSmall .bubble h3 {
+  font-size: 15px;
+}
+
+.textSizeLarge .bubble,
+.textSizeLarge .assistant .bubble.markdownBody,
+.textSizeLarge .assistant .bubble.reportRich > p:first-child {
+  font-size: 17px;
+}
+
+.textSizeLarge .bubble h2 {
+  font-size: 21px;
+}
+
+.textSizeLarge .bubble h3 {
+  font-size: 18px;
+}
+
+.assistant .bubble.reportRich {
+  padding: 18px 20px;
+}
+
+.assistant .bubble.reportRich > p:first-child {
+  color: var(--text-soft);
+  font-size: 15px;
+}
+
+.bubble p,
+.bubble ul,
+.bubble ol,
+.bubble table,
+.bubble pre,
+.bubble hr,
+.bubble h2,
+.bubble h3,
+.bubble h4 {
+  margin: 0 0 11px;
+}
+
+.bubble p:last-child,
+.bubble ul:last-child,
+.bubble ol:last-child,
+.bubble table:last-child,
+.bubble pre:last-child,
+.bubble hr:last-child,
+.bubble h2:last-child,
+.bubble h3:last-child,
+.bubble h4:last-child {
+  margin-bottom: 0;
+}
+
+.bubble h2,
+.bubble h3,
+.bubble h4 {
+  color: #f1ece3;
+  line-height: 1.22;
+  letter-spacing: 0;
+}
+
+.bubble h2 {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.10);
+  font-size: 19px;
+}
+
+.bubble h2:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.bubble.reportRich h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.bubble.reportRich h2::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(231, 111, 46, 0.10);
+}
+
+.bubble h3 {
+  margin-top: 16px;
+  font-size: 16px;
+}
+
+.bubble h4 {
+  font-size: 15px;
+}
+
+.bubble ul,
+.bubble ol {
+  padding-left: 22px;
+}
+
+.bubble li + li {
+  margin-top: 5px;
+}
+
+.bubble a {
+  color: #f2a178;
+  font-weight: 760;
+  text-decoration: none;
+}
+
+.bubble a:hover {
+  text-decoration: underline;
+}
+
+.bubble hr {
+  height: 1px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.bubble table {
+  width: 100%;
+  border-collapse: collapse;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: #252524;
+  display: table;
+  box-shadow: none;
+}
+
+.bubble tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.bubble tr:last-child {
+  border-bottom: 0;
+}
+
+.bubble th,
+.bubble td {
+  min-width: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.10);
+  padding: 8px 10px;
+  color: #d6d0c7;
+  overflow-wrap: anywhere;
+  text-align: left;
+  vertical-align: top;
+}
+
+.bubble th {
+  color: #f0ebe2;
+  background: #30302f;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.bubble td:last-child,
+.bubble th:last-child {
+  border-right: 0;
+}
+
+.bubble code {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 1px 5px;
+  background: rgba(217, 119, 76, 0.16);
+  color: #f1a47b;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.bubble pre {
+  max-width: 100%;
+  position: relative;
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 31px 13px 13px;
+  background: #141414;
+  color: #f7f3ea;
+  box-shadow: 0 10px 26px rgba(20, 17, 11, 0.10);
+}
+
+.bubble pre::before {
+  content: attr(data-language);
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  color: #9fa89d;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.codeCopy {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  height: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0 9px;
+  color: #f7f3ea;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 10px;
+  font-weight: 850;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+.codeCopy:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.speedReaderOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(18, 22, 16, 0.26);
+  -webkit-app-region: no-drag;
+}
+
+.speedReaderOverlay.hidden {
+  display: none;
+}
+
+.speedReaderPanel {
+  width: min(680px, calc(100vw - 42px));
+  border: 1px solid rgba(222, 216, 202, 0.88);
+  border-radius: 18px;
+  padding: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 251, 244, 0.94)),
+    #fffdf8;
+  box-shadow: 0 30px 90px rgba(20, 17, 11, 0.24);
+}
+
+.speedReaderHeader,
+.speedReaderControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.speedReaderHeader strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.speedReaderHeader span {
+  color: #70766c;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.speedReaderHeader button,
+.speedReaderControls button {
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 0 10px;
+  color: #3d4139;
+  background: #fffefa;
+  font-size: 12px;
+  font-weight: 820;
+  cursor: pointer;
+}
+
+.speedReaderWord {
+  min-height: 152px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #171b15;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 44px;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.speedReaderWord b {
+  color: var(--accent-2);
+  font-weight: 920;
+}
+
+.speedReaderProgress {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(222, 216, 202, 0.72);
+  margin-bottom: 14px;
+}
+
+.speedReaderProgress span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+.speedReaderControls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #5e655b;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.bubble pre:not([data-language]) {
+  padding-top: 14px;
+}
+
+.bubble pre:not([data-language])::before {
+  content: none;
+}
+
+.bubble pre code {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+  font-family: var(--font-mono);
+}
+
+.meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #a7a198;
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 9px;
+}
+
+.meta strong {
+  font-weight: 820;
+}

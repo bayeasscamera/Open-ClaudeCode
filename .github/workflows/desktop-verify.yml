@@ -1,0 +1,38 @@
+name: Desktop Verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  desktop:
+    name: Audit and test desktop
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Desktop verification
+        run: npm run verify:ci
+
+      - name: Desktop UI smoke
+        run: npm run test:ui
+
+      - name: Desktop visual smoke
+        run: npm run test:visual

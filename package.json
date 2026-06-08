@@ -1,0 +1,17 @@
+{
+  "name": "opc-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fast desktop shell for OPC CLI",
+  "author": "OPC Contributors",
+  "main": "electron/main.cjs",
+  "type": "commonjs",
+  "scripts": {
+    "typecheck:refactor": "tsc -p tsconfig.check.json --pretty false",
+    "verify:ci": "npm run typecheck:refactor && npm --prefix desktop run verify:ci"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^6.0.3"
+  }
+}

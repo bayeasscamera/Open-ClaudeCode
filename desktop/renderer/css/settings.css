@@ -1,0 +1,1916 @@
+.settingsBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 24;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(10, 14, 12, 0.36);
+  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-app-region: no-drag;
+}
+
+.settingsBackdrop.hidden {
+  display: none;
+}
+
+.settingsDialog {
+  width: min(1040px, calc(100vw - 44px));
+  max-height: min(780px, calc(100vh - 44px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(222, 216, 202, 0.92);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fffefa 0%, #faf8f3 100%);
+  box-shadow: var(--shadow-floating);
+}
+
+.settingsHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid var(--hairline);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 253, 248, 0.72)),
+    var(--surface);
+}
+
+.settingsHeaderTitle span,
+.settingsSearch span {
+  color: var(--accent-2);
+  font-size: 11px;
+  font-weight: 860;
+  text-transform: uppercase;
+}
+
+.settingsHeader h2 {
+  margin: 4px 0 0;
+  font-size: 25px;
+  letter-spacing: 0;
+  line-height: 1.1;
+}
+
+.settingsCommandBar {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(250px, 0.7fr) minmax(0, 1.3fr);
+  gap: 10px;
+}
+
+.settingsSearch {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.settingsSearch input {
+  width: 100%;
+  height: 40px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0 12px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+.settingsSearch input:focus {
+  border-color: rgba(231, 111, 46, 0.42);
+  box-shadow: 0 0 0 3px rgba(231, 111, 46, 0.12);
+  outline: 0;
+}
+
+.settingsOverview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
+  gap: 7px;
+  align-self: end;
+}
+
+.settingsOverviewCard {
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid rgba(222, 216, 202, 0.92);
+  border-radius: 12px;
+  padding: 7px 9px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.78);
+  text-align: left;
+  box-shadow: none;
+}
+
+.settingsOverviewCard:hover,
+.settingsOverviewCard.active {
+  border-color: rgba(231, 111, 46, 0.28);
+  background: rgba(255, 252, 247, 0.95);
+}
+
+.settingsOverviewCard span,
+.settingsOverviewCard strong,
+.settingsOverviewCard em {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsOverviewCard span {
+  color: var(--accent-2);
+  font-size: 10px;
+  font-weight: 880;
+  text-transform: uppercase;
+}
+
+.settingsOverviewCard strong {
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.settingsOverviewCard em {
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.settingsContent {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 178px minmax(0, 1fr);
+}
+
+.settingsNav {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 16px 14px;
+  border-right: 1px solid var(--hairline);
+  background: rgba(250, 247, 241, 0.74);
+}
+
+.settingsNav button {
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0 12px;
+  color: var(--muted);
+  background: transparent;
+  text-align: left;
+  font-weight: 780;
+}
+
+.settingsNav button:hover {
+  color: var(--ink);
+  border-color: rgba(222, 216, 202, 0.92);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.settingsNav button.active {
+  color: var(--ink);
+  border-color: rgba(231, 111, 46, 0.28);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.settingsNav button.searchHidden {
+  display: none;
+}
+
+.settingsPanels {
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 20px 20px;
+  scrollbar-gutter: stable;
+}
+
+.settingsPanel {
+  display: none;
+  gap: 14px;
+}
+
+.settingsPanel.active {
+  display: grid;
+}
+
+.settingsPanel.searchHidden {
+  display: none;
+}
+
+.settingsSearchEmpty {
+  border: 1px solid rgba(222, 216, 202, 0.92);
+  border-radius: 16px;
+  padding: 18px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.72);
+  font-weight: 760;
+}
+
+.settingsSearchEmpty.hidden {
+  display: none;
+}
+
+.settingsSectionTitle {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 1px;
+}
+
+.settingsSectionTitle span {
+  color: var(--accent-2);
+  font-size: 12px;
+  font-weight: 870;
+  text-transform: uppercase;
+}
+
+.settingsSectionTitle strong {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.settingsGrid,
+.settingsMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settingsField {
+  display: grid;
+  gap: 7px;
+}
+
+.settingsField.wide {
+  grid-column: 1 / -1;
+}
+
+.settingsField span {
+  color: #666b61;
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.settingsField input,
+.settingsField select,
+.settingsField textarea {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text);
+}
+
+.settingsField input,
+.settingsField select {
+  height: 40px;
+  padding: 0 12px;
+}
+
+.settingsField textarea {
+  min-height: 84px;
+  resize: vertical;
+  padding: 11px 12px;
+  line-height: 1.45;
+}
+
+.settingsField input,
+.settingsField textarea {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.settingsField input:focus,
+.settingsField select:focus,
+.settingsField textarea:focus {
+  border-color: rgba(231, 111, 46, 0.44);
+  box-shadow: 0 0 0 3px rgba(231, 111, 46, 0.12);
+  outline: 0;
+}
+
+.settingsSwitch {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border: 1px solid rgba(222, 216, 202, 0.92);
+  border-radius: 13px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.settingsSwitch input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.settingsSwitch span {
+  display: grid;
+  gap: 3px;
+}
+
+.settingsSwitch strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.settingsSwitch em {
+  color: var(--muted);
+  font-size: 13px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.settingsCapabilityBlock {
+  display: grid;
+  gap: 11px;
+  border: 1px solid rgba(222, 216, 202, 0.92);
+  border-radius: 14px;
+  padding: 13px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.settingsCapabilityHeader {
+  display: grid;
+  gap: 4px;
+}
+
+.settingsCapabilityHeader span {
+  color: var(--accent-2);
+  font-size: 11px;
+  font-weight: 880;
+  text-transform: uppercase;
+}
+
+.settingsCapabilityHeader strong {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.settingsCapabilityGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settingsCapability {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  min-height: 54px;
+  border: 1px solid rgba(224, 217, 205, 0.88);
+  border-radius: 11px;
+  padding: 9px;
+  background: rgba(255, 253, 248, 0.82);
+}
+
+.settingsCapability input {
+  width: 17px;
+  height: 17px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.settingsCapability span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settingsCapability strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsCapability em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.3;
+}
+
+.settingsCapability:has(input:disabled) {
+  opacity: 0.56;
+}
+
+.settingsActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.settingsMetric,
+.settingsProjectCard,
+.settingsProviderItem,
+.settingsDangerZone {
+  border: 1px solid rgba(222, 216, 202, 0.92);
+  border-radius: 14px;
+  padding: 13px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.settingsMetric {
+  display: grid;
+  gap: 4px;
+}
+
+.settingsMetric span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.settingsMetric strong {
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.settingsMetric em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.settingsProviderList {
+  display: grid;
+  gap: 12px;
+}
+
+.settingsProviderList.hidden,
+.settingsProviderHistory.hidden {
+  display: none;
+}
+
+.settingsProviderGroup {
+  display: grid;
+  gap: 8px;
+}
+
+.settingsProviderGroupHeader {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 2px 2px;
+}
+
+.settingsProviderGroupHeader strong {
+  display: block;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.settingsProviderGroupHeader span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.settingsProviderGroupHeader em {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: var(--muted);
+  background: rgba(255, 253, 248, 0.82);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.settingsProviderGroup.suggestions .settingsProviderItem {
+  border-color: rgba(231, 111, 46, 0.22);
+  background: rgba(255, 252, 248, 0.86);
+}
+
+.settingsProviderGroup.nvidia .settingsProviderItem::before {
+  background: rgba(121, 184, 139, 0.76);
+}
+
+.settingsProviderGroup.ollama .settingsProviderItem::before {
+  background: rgba(240, 154, 110, 0.84);
+}
+
+.settingsProviderGroup.disabled .settingsProviderItem {
+  opacity: 0.86;
+  border-style: dashed;
+}
+
+.settingsProviderItem {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 12px;
+  align-items: center;
+  overflow: hidden;
+  padding-left: 16px;
+  box-shadow: none;
+}
+
+.settingsProviderItem::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--border-strong);
+}
+
+.settingsProviderItem:hover {
+  border-color: rgba(201, 188, 174, 0.95);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.settingsProviderItem.ok::before {
+  background: rgba(35, 133, 83, 0.72);
+}
+
+.settingsProviderItem.checking::before {
+  background: var(--accent);
+}
+
+.settingsProviderItem.rate_limited::before,
+.settingsProviderItem.timeout::before,
+.settingsProviderItem.unsupported::before,
+.settingsProviderItem.needs_config::before,
+.settingsProviderItem.network::before,
+.settingsProviderItem.server::before,
+.settingsProviderItem.error::before {
+  background: rgba(182, 68, 56, 0.72);
+}
+
+.settingsProviderItem strong {
+  display: block;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsProviderItem span {
+  display: block;
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsProviderStatus {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: var(--muted);
+  background: rgba(255, 253, 248, 0.86);
+  font-size: 11px;
+  font-weight: 860;
+  text-transform: uppercase;
+}
+
+.settingsProviderStatus.ok {
+  color: var(--ok);
+  border-color: rgba(35, 133, 83, 0.28);
+  background: rgba(238, 249, 242, 0.9);
+}
+
+.settingsProviderStatus.error,
+.settingsProviderStatus.needs_config,
+.settingsProviderStatus.unsupported,
+.settingsProviderStatus.timeout,
+.settingsProviderStatus.rate_limited,
+.settingsProviderStatus.network,
+.settingsProviderStatus.server {
+  color: var(--danger);
+  border-color: rgba(182, 68, 56, 0.28);
+  background: rgba(255, 242, 240, 0.94);
+}
+
+.settingsProviderStatus.warning {
+  color: #946617;
+  border-color: rgba(210, 163, 72, 0.32);
+  background: rgba(255, 247, 222, 0.92);
+}
+
+.settingsProviderStatus.checking {
+  color: var(--accent-strong);
+  border-color: rgba(231, 111, 46, 0.30);
+  background: rgba(255, 241, 229, 0.92);
+}
+
+.settingsProviderStatus.needs_config {
+  color: #7f4a15;
+  border-color: rgba(181, 104, 23, 0.30);
+  background: rgba(255, 246, 231, 0.94);
+}
+
+.settingsProviderStatus.rate_limited {
+  color: #8a5d13;
+  border-color: rgba(210, 163, 72, 0.34);
+  background: rgba(255, 248, 226, 0.94);
+}
+
+.settingsProviderStatus.timeout,
+.settingsProviderStatus.network {
+  color: #8b5129;
+  border-color: rgba(210, 114, 52, 0.32);
+  background: rgba(255, 243, 233, 0.94);
+}
+
+.settingsProviderItem.ok {
+  border-color: rgba(35, 133, 83, 0.22);
+}
+
+.settingsProviderItem.rate_limited,
+.settingsProviderItem.timeout,
+.settingsProviderItem.unsupported,
+.settingsProviderItem.needs_config,
+.settingsProviderItem.network,
+.settingsProviderItem.server,
+.settingsProviderItem.error {
+  border-color: rgba(182, 68, 56, 0.24);
+}
+
+.settingsProviderItem.checking {
+  border-color: rgba(231, 111, 46, 0.30);
+}
+
+.settingsProviderEditor {
+  display: grid;
+  gap: 13px;
+  border: 1px solid rgba(222, 216, 202, 0.92);
+  border-left: 4px solid var(--accent);
+  border-radius: 15px;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: none;
+}
+
+.settingsProviderImport {
+  display: grid;
+  gap: 13px;
+  border: 1px solid rgba(222, 216, 202, 0.92);
+  border-left: 4px solid var(--accent);
+  border-radius: 15px;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.settingsProviderEditor.hidden,
+.settingsProviderImport.hidden {
+  display: none;
+}
+
+.settingsProviderEditorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settingsProviderEditorHeader span {
+  display: block;
+  color: var(--accent-2);
+  font-size: 11px;
+  font-weight: 880;
+  text-transform: uppercase;
+}
+
+.settingsProviderEditorHeader strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.settingsProviderItem .settingsProviderActions {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.settingsProviderMeta {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settingsProviderMeta span {
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 7px;
+  color: var(--muted);
+  background: rgba(255, 253, 248, 0.84);
+  font-size: 11px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.settingsProviderMiniButton {
+  min-height: 29px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 0 9px;
+  color: var(--muted);
+  background: rgba(255, 253, 248, 0.94);
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.settingsProviderMiniButton:hover {
+  color: var(--ink);
+  border-color: rgba(231, 111, 46, 0.3);
+  background: #fff8f1;
+}
+
+.settingsProviderMiniButton:disabled {
+  opacity: 0.48;
+}
+
+.settingsPanel[data-settings-panel="providers"] > .settingsActions {
+  border: 1px solid rgba(222, 216, 202, 0.78);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.settingsPanel[data-settings-panel="providers"] > .settingsActions .primaryButton,
+.settingsPanel[data-settings-panel="providers"] > .settingsActions .secondaryButton {
+  height: 34px;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.settingsInlineError {
+  border: 1px solid rgba(182, 68, 56, 0.24);
+  border-radius: 13px;
+  padding: 10px 12px;
+  color: var(--danger);
+  background: rgba(255, 242, 240, 0.9);
+  font-size: 13px;
+  font-weight: 740;
+}
+
+.settingsInlineError.hidden {
+  display: none;
+}
+
+.settingsInlineStatus {
+  border: 1px solid rgba(35, 133, 83, 0.22);
+  border-radius: 13px;
+  padding: 10px 12px;
+  color: var(--ok);
+  background: rgba(238, 249, 242, 0.82);
+  font-size: 13px;
+  font-weight: 740;
+}
+
+.settingsInlineStatus.warning {
+  color: #8b5129;
+  border-color: rgba(210, 134, 50, 0.26);
+  background: rgba(255, 246, 231, 0.88);
+}
+
+.settingsInlineStatus.error {
+  color: var(--danger);
+  border-color: rgba(182, 68, 56, 0.24);
+  background: rgba(255, 242, 240, 0.9);
+}
+
+.settingsInlineStatus.hidden {
+  display: none;
+}
+
+.settingsRepairLog {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(222, 216, 202, 0.92);
+  border-left: 3px solid var(--accent);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.settingsRepairLog.hidden {
+  display: none;
+}
+
+.settingsRepairLogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settingsRepairLogHeader strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.settingsRepairLogHeader span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.settingsRepairLogList {
+  display: grid;
+  gap: 7px;
+}
+
+.settingsRepairLogItem {
+  display: grid;
+  gap: 3px;
+  border: 1px solid rgba(222, 216, 202, 0.86);
+  border-radius: 13px;
+  padding: 10px 11px;
+  background: rgba(255, 253, 248, 0.78);
+}
+
+.settingsRepairLogItem span {
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 880;
+  text-transform: uppercase;
+}
+
+.settingsRepairLogItem strong {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.settingsRepairLogItem em,
+.settingsRepairLogChecked {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.settingsRepairLogChecked {
+  margin: 0;
+}
+
+.settingsProviderHistory {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(222, 216, 202, 0.92);
+  border-left: 3px solid var(--accent);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.settingsProviderHistoryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settingsProviderHistoryHeader strong {
+  display: block;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.settingsProviderHistoryHeader span,
+.settingsProviderHistoryEmpty {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.settingsProviderHistoryHeader em {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: var(--muted);
+  background: rgba(255, 253, 248, 0.82);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.settingsProviderHistoryList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+.settingsProviderHistoryItem {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(222, 216, 202, 0.88);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 253, 248, 0.86);
+}
+
+.settingsProviderHistoryItem.ok,
+.settingsProviderHistoryItem.warning {
+  border-left-color: rgba(35, 133, 83, 0.66);
+}
+
+.settingsProviderHistoryItem.rate_limited,
+.settingsProviderHistoryItem.timeout,
+.settingsProviderHistoryItem.unsupported,
+.settingsProviderHistoryItem.needs_config,
+.settingsProviderHistoryItem.network,
+.settingsProviderHistoryItem.server,
+.settingsProviderHistoryItem.error {
+  border-left-color: rgba(182, 68, 56, 0.68);
+}
+
+.settingsProviderHistoryMain {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.settingsProviderHistoryMain strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsProviderHistoryMain span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.74);
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.settingsProviderHistoryMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settingsProviderHistoryMeta span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 7px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.68);
+  font-size: 11px;
+  font-weight: 780;
+}
+
+.settingsProviderHistoryItem p,
+.settingsProviderHistoryEmpty {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.settingsProviderHistoryItem p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settingsProviderHistoryActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.settingsProjectCard {
+  display: grid;
+  gap: 12px;
+}
+
+.settingsProjectHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.settingsProjectCard h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.settingsProjectCard p {
+  max-width: 74ch;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.settingsLocalBadge {
+  flex: 0 0 auto;
+  border: 1px solid rgba(35, 133, 83, 0.24);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--ok);
+  background: rgba(238, 249, 242, 0.88);
+  font-size: 10px;
+  font-weight: 880;
+  text-transform: uppercase;
+}
+
+.settingsProjectRuntime {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settingsProjectRuntime span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 9px;
+  color: var(--muted);
+  background: rgba(255, 253, 248, 0.78);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.settingsProjectMaturity,
+.settingsEnvironmentStack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settingsProjectMaturity div,
+.settingsEnvironmentItem {
+  min-width: 0;
+  border: 1px solid rgba(222, 216, 202, 0.88);
+  border-radius: 15px;
+  padding: 12px;
+  background: rgba(255, 253, 248, 0.78);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.76);
+}
+
+.settingsProjectMaturity span,
+.settingsProjectMaturity strong,
+.settingsProjectMaturity em {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settingsProjectMaturity span,
+.settingsEnvironmentItem span {
+  color: var(--accent-2);
+  font-size: 10px;
+  font-weight: 880;
+  text-transform: uppercase;
+}
+
+.settingsProjectMaturity strong,
+.settingsEnvironmentItem strong {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 860;
+}
+
+.settingsProjectMaturity em {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.settingsEnvironmentSummary .settingsMetric strong {
+  font-size: 16px;
+}
+
+.settingsEnvironmentItem {
+  display: grid;
+  gap: 8px;
+}
+
+.settingsEnvironmentItem div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settingsEnvironmentItem strong {
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsEnvironmentItem p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settingsEnvironmentItem.ok {
+  border-left: 3px solid rgba(35, 133, 83, 0.68);
+}
+
+.settingsEnvironmentItem.running {
+  border-left: 3px solid rgba(231, 111, 46, 0.72);
+}
+
+.settingsEnvironmentItem.error {
+  border-left: 3px solid rgba(182, 68, 56, 0.72);
+}
+
+.settingsDangerZone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-color: rgba(182, 68, 56, 0.22);
+  background: rgba(255, 246, 244, 0.72);
+}
+
+.settingsDangerZone strong,
+.settingsDangerZone span {
+  display: block;
+}
+
+.settingsDangerZone span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.settingsDoctorReport {
+  display: grid;
+  gap: 10px;
+}
+
+.settingsDoctorEmpty,
+.settingsDoctorCheck {
+  border: 1px solid rgba(222, 216, 202, 0.92);
+  border-radius: 16px;
+  padding: 13px 14px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.settingsDoctorEmpty {
+  color: var(--muted);
+  font-weight: 740;
+}
+
+.settingsDoctorEmpty.error {
+  color: var(--danger);
+  border-color: rgba(182, 68, 56, 0.24);
+  background: rgba(255, 242, 240, 0.88);
+}
+
+.settingsDoctorCheck {
+  display: grid;
+  gap: 8px;
+}
+
+.settingsDoctorCheck div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settingsDoctorCheck span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--muted);
+  background: rgba(255, 253, 248, 0.86);
+  font-size: 10px;
+  font-weight: 880;
+  text-transform: uppercase;
+}
+
+.settingsDoctorCheck strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 880;
+}
+
+.settingsDoctorCheck p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.settingsDoctorCheck pre {
+  max-height: 140px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid rgba(222, 216, 202, 0.76);
+  border-radius: 12px;
+  padding: 10px;
+  color: #2b302a;
+  background: rgba(255, 253, 248, 0.78);
+  font-size: 11px;
+  line-height: 1.4;
+  user-select: text;
+  white-space: pre-wrap;
+}
+
+.settingsDoctorCheck pre.hidden {
+  display: none;
+}
+
+.settingsDoctorCheck.ok {
+  border-left: 3px solid rgba(35, 133, 83, 0.72);
+}
+
+.settingsDoctorCheck.ok span {
+  color: var(--ok);
+  border-color: rgba(35, 133, 83, 0.28);
+  background: rgba(238, 249, 242, 0.9);
+}
+
+.settingsDoctorCheck.warning,
+.settingsDoctorCheck.info {
+  border-left: 3px solid rgba(210, 134, 50, 0.72);
+}
+
+.settingsDoctorCheck.warning span,
+.settingsDoctorCheck.info span {
+  color: #8b5129;
+  border-color: rgba(210, 134, 50, 0.28);
+  background: rgba(255, 246, 231, 0.92);
+}
+
+.settingsDoctorCheck.error {
+  border-left: 3px solid rgba(182, 68, 56, 0.76);
+}
+
+.settingsDoctorCheck.error span {
+  color: var(--danger);
+  border-color: rgba(182, 68, 56, 0.28);
+  background: rgba(255, 242, 240, 0.94);
+}
+
+.dangerButton {
+  min-height: 36px;
+  border: 1px solid rgba(182, 68, 56, 0.28);
+  border-radius: 12px;
+  padding: 0 13px;
+  color: #fffaf6;
+  background: var(--danger);
+  font-weight: 820;
+}
+
+.settingsBackdrop {
+  background: rgba(10, 10, 10, 0.54);
+}
+
+.settingsDialog {
+  border-color: rgba(255, 255, 255, 0.10);
+  background: #181817;
+}
+
+.settingsHeader {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  background: #151514;
+}
+
+.settingsHeader h2,
+.settingsOverviewCard strong,
+.settingsSectionTitle strong,
+.settingsCapability strong,
+.settingsMetric strong,
+.settingsProviderItem strong,
+.settingsProviderEditorHeader strong,
+.settingsProviderHistoryHeader strong,
+.settingsProviderHistoryMain strong,
+.settingsProjectCard h3,
+.settingsProjectMaturity strong,
+.settingsEnvironmentItem strong,
+.settingsDoctorCheck strong {
+  color: #f0ebe2;
+}
+
+.settingsHeaderTitle span,
+.settingsSearch span,
+.settingsSectionTitle span,
+.settingsCapabilityHeader span,
+.settingsMetric span,
+.settingsProviderEditorHeader span,
+.settingsProjectMaturity span,
+.settingsEnvironmentItem span {
+  color: #d9875d;
+}
+
+.settingsSearch input,
+.settingsField input,
+.settingsField select,
+.settingsField textarea {
+  color: #eee8df;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #44423f;
+}
+
+.settingsSearch input::placeholder,
+.settingsField input::placeholder,
+.settingsField textarea::placeholder {
+  color: #8e8a82;
+}
+
+.settingsNav {
+  border-right-color: rgba(255, 255, 255, 0.08);
+  background: #20201f;
+}
+
+.settingsNav button {
+  color: #9f9a91;
+}
+
+.settingsNav button:hover,
+.settingsNav button.active {
+  color: #f0ebe2;
+  border-color: rgba(255, 255, 255, 0.10);
+  background: #30302f;
+}
+
+.settingsNav button.active {
+  color: #201613;
+  border-color: #d9774c;
+  background: #d9774c;
+  box-shadow: none;
+}
+
+.settingsPanels {
+  background: #181817;
+}
+
+.settingsOverviewCard,
+.settingsSearchEmpty,
+.settingsSwitch,
+.settingsCapabilityBlock,
+.settingsCapability,
+.settingsMetric,
+.settingsProjectCard,
+.settingsProviderItem,
+.settingsDangerZone,
+.settingsProviderEditor,
+.settingsProviderImport,
+.settingsRepairLog,
+.settingsProviderHistory,
+.settingsProviderHistoryItem,
+.settingsRepairLogItem,
+.settingsPanel[data-settings-panel="providers"] > .settingsActions,
+.settingsProjectMaturity div,
+.settingsEnvironmentItem {
+  border-color: rgba(255, 255, 255, 0.10);
+  background: #333331;
+  box-shadow: none;
+}
+
+.settingsOverviewCard:hover,
+.settingsOverviewCard.active,
+.settingsProviderItem:hover {
+  border-color: rgba(217, 119, 76, 0.30);
+  background: #30302f;
+}
+
+.settingsField span,
+.settingsSwitch em,
+.settingsCapabilityHeader strong,
+.settingsCapability em,
+.settingsMetric em,
+.settingsOverviewCard em,
+.settingsOverviewCard span,
+.settingsProviderItem span,
+.settingsProviderMeta span,
+.settingsProviderHistoryHeader span,
+.settingsProviderHistoryEmpty,
+.settingsProviderHistoryItem p,
+.settingsProjectCard p,
+.settingsProjectRuntime span {
+  color: #a6a198;
+}
+
+.settingsProviderMeta span,
+.settingsProviderHistoryMeta span,
+.settingsProviderHistoryHeader em,
+.settingsProviderHistoryMain span {
+  border-color: rgba(255, 255, 255, 0.10);
+  background: #333331;
+}
+
+.settingsProviderMiniButton,
+.settingsPanel[data-settings-panel="providers"] > .settingsActions .secondaryButton,
+.settingsProviderHistoryActions .settingsProviderMiniButton,
+.secondaryButton {
+  color: #e8e2d8;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #333331;
+}
+
+.settingsProviderMiniButton:hover,
+.secondaryButton:hover:not(:disabled) {
+  color: #fff4eb;
+  border-color: rgba(217, 119, 76, 0.34);
+  background: #3a3937;
+}
+
+.settingsProviderMiniButton.danger {
+  color: #efaaa2;
+  border-color: rgba(208, 107, 99, 0.30);
+}
+
+.settingsProviderMiniButton.danger:hover {
+  color: #ffd8d3;
+  border-color: rgba(208, 107, 99, 0.48);
+  background: rgba(208, 107, 99, 0.14);
+}
+
+.settingsInlineStatus {
+  color: #9cd4aa;
+  border-color: rgba(121, 184, 139, 0.28);
+  background: rgba(121, 184, 139, 0.10);
+}
+
+.settingsInlineError,
+.settingsInlineStatus.error {
+  color: #efaaa2;
+  border-color: rgba(208, 107, 99, 0.28);
+  background: rgba(208, 107, 99, 0.12);
+}
+
+.dangerButton {
+  color: #241b19;
+  background: #e0aaa3;
+}
+
+/* Dark desktop polish: keep Settings dense, readable and action-focused. */
+.settingsDialog {
+  border-color: rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  background: #191918;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58);
+}
+
+.settingsHeader {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  background: #1b1b1a;
+}
+
+.settingsHeader h2 {
+  color: #f3eee5;
+  font-size: 24px;
+}
+
+.settingsCommandBar {
+  grid-template-columns: minmax(240px, 0.64fr) minmax(0, 1.36fr);
+  align-items: end;
+}
+
+.settingsSearch input,
+.settingsField input,
+.settingsField select,
+.settingsField textarea {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #2e2e2d;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.settingsSearch input:focus,
+.settingsField input:focus,
+.settingsField select:focus,
+.settingsField textarea:focus {
+  border-color: rgba(217, 119, 76, 0.48);
+  box-shadow: 0 0 0 3px rgba(217, 119, 76, 0.14);
+}
+
+.settingsOverviewCard {
+  min-height: 42px;
+  border-color: rgba(255, 255, 255, 0.09);
+  border-radius: 11px;
+  background: #252524;
+}
+
+.settingsOverviewCard:hover,
+.settingsOverviewCard.active {
+  border-color: rgba(217, 119, 76, 0.36);
+  background: #2d2d2b;
+}
+
+.settingsContent {
+  grid-template-columns: 168px minmax(0, 1fr);
+}
+
+.settingsNav {
+  gap: 5px;
+  padding: 14px 12px;
+  background: #1e1e1d;
+}
+
+.settingsNav button {
+  min-height: 36px;
+  border-radius: 9px;
+  color: #a9a49b;
+}
+
+.settingsNav button:hover {
+  color: #f0ebe2;
+  border-color: rgba(255, 255, 255, 0.11);
+  background: #2a2a29;
+}
+
+.settingsNav button.active {
+  color: #201613;
+  border-color: #d9774c;
+  background: #d9774c;
+  box-shadow: none;
+}
+
+.settingsPanels {
+  background: #171716;
+}
+
+.settingsPanel {
+  align-content: start;
+}
+
+.settingsSectionTitle {
+  padding-bottom: 2px;
+}
+
+.settingsSectionTitle strong {
+  max-width: 780px;
+  color: #aaa49a;
+}
+
+.settingsGrid,
+.settingsMetricGrid {
+  gap: 9px;
+}
+
+.settingsMetricGrid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.settingsControlGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settingsControlGrid .settingsSwitch,
+.settingsControlGrid .settingsField {
+  min-height: 78px;
+  border-color: rgba(255, 255, 255, 0.10);
+  border-radius: 13px;
+  background: #2b2b2a;
+}
+
+.settingsControlGrid .settingsSwitch:hover,
+.settingsControlGrid .settingsField:hover,
+.settingsSwitch:hover,
+.settingsCapability:hover,
+.settingsMetric:hover {
+  border-color: rgba(217, 119, 76, 0.26);
+  background: #30302f;
+}
+
+.settingsSwitchCompact {
+  align-items: center;
+  padding: 11px 12px;
+}
+
+.settingsSwitchCompact input {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
+.settingsSwitchCompact span {
+  min-width: 0;
+}
+
+.settingsSwitchCompact strong,
+.settingsFieldCompact span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsSwitchCompact em {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.settingsFieldCompact {
+  align-content: center;
+  padding: 10px 12px;
+}
+
+.settingsFieldCompact input {
+  max-width: 132px;
+}
+
+.settingsControlWide {
+  grid-column: 1 / -1;
+  min-height: 66px !important;
+}
+
+.settingsCapabilityBlock,
+.settingsCapability,
+.settingsMetric,
+.settingsProjectCard,
+.settingsProviderItem,
+.settingsDangerZone,
+.settingsProviderEditor,
+.settingsProviderImport,
+.settingsRepairLog,
+.settingsProviderHistory,
+.settingsProviderHistoryItem,
+.settingsRepairLogItem,
+.settingsPanel[data-settings-panel="providers"] > .settingsActions,
+.settingsProjectMaturity div,
+.settingsEnvironmentItem,
+.settingsDoctorEmpty,
+.settingsDoctorCheck {
+  border-color: rgba(255, 255, 255, 0.10);
+  background: #2b2b2a;
+}
+
+.settingsProviderGroupHeader strong,
+.settingsProviderItem strong,
+.settingsDoctorCheck strong {
+  color: #f1ece3;
+}
+
+.settingsProviderGroupHeader span,
+.settingsDoctorCheck p {
+  color: #aaa49a;
+}
+
+.settingsProviderGroupHeader em,
+.settingsProviderStatus,
+.settingsProviderMeta span,
+.settingsProviderHistoryMeta span,
+.settingsProviderHistoryHeader em,
+.settingsProviderHistoryMain span {
+  border-color: rgba(255, 255, 255, 0.11);
+  background: #242423;
+}
+
+.settingsProviderItem {
+  border-radius: 13px;
+  background: #2a2a29;
+}
+
+.settingsProviderItem:hover {
+  border-color: rgba(217, 119, 76, 0.30);
+  background: #30302f;
+}
+
+.settingsProviderItem::before {
+  width: 4px;
+}
+
+.settingsDoctorReport {
+  gap: 10px;
+}
+
+.settingsProviderImport,
+.settingsProviderEditor {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: #45433f;
+  box-shadow: inset 6px 0 0 rgba(217, 119, 76, 0.88);
+}
+
+.settingsProviderImport .settingsField textarea,
+.settingsProviderEditor .settingsField textarea {
+  border-color: rgba(217, 119, 76, 0.36);
+  background: #181817;
+}
+
+.settingsDoctorCheck {
+  border-radius: 13px;
+}
+
+.settingsDoctorCheck div {
+  gap: 8px;
+}
+
+.settingsDoctorCheck span {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: #20201f;
+}
+
+.settingsDoctorCheck pre {
+  max-height: 188px;
+  color: #e7e1d8;
+  border-color: rgba(255, 255, 255, 0.10);
+  background: #181817;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.settingsDangerZone {
+  align-items: center;
+}
+
+.compactMode .messages {
+  padding-top: 14px;
+  padding-bottom: 12px;
+}
+
+.compactMode .message {
+  margin-bottom: 12px;
+}
+
+.compactMode .activityPanel,
+.compactMode .projectContextPanel {
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.compactMode .bubble {
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.compactMode .assistant .bubble {
+  padding: 12px 14px;
+}
+
+.compactMode .composer {
+  padding: 0 18px 14px;
+}
+
+.compactMode .composerBox {
+  gap: 5px;
+  border-radius: 16px;
+  padding: 7px 9px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.26);
+}
+
+.compactMode textarea {
+  min-height: 46px;
+  max-height: 96px;
+  padding: 3px 8px;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.compactMode .composerActions {
+  gap: 6px;
+  padding-bottom: 0;
+}
+
+.compactMode .composerPlusButton,
+.compactMode .sendButton,
+.compactMode .stopButton,
+.compactMode .rescueButton,
+.compactMode .refineButton,
+.compactMode .refineUndoButton {
+  height: 30px;
+}
+
+.compactMode .composerPlusButton {
+  width: 30px;
+  font-size: 22px;
+}
+
+.compactMode .composerModelSelect {
+  height: 30px;
+  font-size: 11px;
+}
+
+.compactMode .timeline,
+.compactMode .messageActions,
+.compactMode .diagnostics {
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+.compactMode .chip,
+.compactMode .diagnosticItem {
+  padding: 3px 7px;
+  font-size: 10px;
+}
+
+.compactMode .sessionProgress {
+  margin-top: 8px;
+  padding: 8px 10px;
+}
+
+.compactMode .executionSteps,
+.compactMode .toolList {
+  margin-top: 6px;
+  gap: 2px;
+}
+
+.compactMode .toolItem,
+.compactMode .executionStep {
+  font-size: 11px;
+}
+
+@media (max-width: 860px) {
+  .settingsDialog {
+    width: min(1040px, calc(100vw - 24px));
+    max-height: min(820px, calc(100vh - 24px));
+  }
+
+  .settingsHeader {
+    padding: 16px;
+  }
+
+  .settingsCommandBar {
+    grid-template-columns: 1fr;
+  }
+
+  .settingsOverview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settingsContent {
+    grid-template-columns: 1fr;
+  }
+
+  .settingsNav {
+    grid-template-columns: repeat(7, minmax(120px, 1fr));
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--hairline);
+    padding: 12px;
+  }
+
+  .settingsNav button {
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .settingsGrid,
+  .settingsMetricGrid,
+  .settingsControlGrid,
+  .settingsProjectMaturity,
+  .settingsEnvironmentStack,
+  .settingsCapabilityGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .settingsControlWide {
+    grid-column: auto;
+  }
+
+  .settingsPanels {
+    padding: 16px;
+  }
+
+  .settingsProviderItem {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settingsProviderStatus {
+    justify-self: start;
+  }
+
+  .settingsProviderHistoryList {
+    grid-template-columns: 1fr;
+  }
+}
