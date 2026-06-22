@@ -4,7 +4,7 @@
 > Centralise le contexte vital pour être opérationnel immédiatement, sans ré-explication.
 > Toute erreur ou préférence durable doit être consignée ici (apprentissage itératif).
 
-**Dernière mise à jour :** 2026-06-22 — **v6.0.0** (ajout Index rapide, profil session, pièges P1-P10, règles numérotées 1-12, section Design & UX)
+**Dernière mise à jour :** 2026-06-22 — **v6.1.0** (ajout P11/P12 + décisions associées suite aux sprints 1-4 du hardening)
 
 ---
 
@@ -193,6 +193,8 @@ Boucle **jamais bloquée** (timeout = pire cas borné), `defaultReason` toujours
 | **P8** | **IPC handler qui throw** : retourner `{ ok: false, error }`, ne jamais propager | Le renderer reçoit une exception non gérée ; état UI incohérent, pas de recovery |
 | **P9** | **Tests qui mockent le système de fichiers entier** : préférer `os.tmpdir()` + cleanup explicite | Tests qui passent en mock mais échouent en intégration ; pollution du repo |
 | **P10** | **Validation IPC obligatoire** via `desktop/electron/ipcValidation.cjs` : ne JAMAIS bypasser | Canal non validé = faille XSS, command injection ou path traversal exploitable depuis le renderer |
+| **P11** | **Buffers texte IPC/stream bornés** via `appendBoundedText(current, next, maxChars)` qui conserve la **queue** (`slice(-maxChars)`), pas la tête | Un stdout de loop agentique est un flux infini : garder le début = perdre toute l'info utile ; un buffer non borné = OOM et freeze IPC |
+| **P12** | **`webContents.send` toujours wrappé** via `createSendChannel({ getMainWindow, log })` qui no-op sur `mainWindow == null`, `mainWindow.isDestroyed()`, `webContents == null`, `webContents.isDestroyed()`, et qui swallow toute exception de `send()` | Renderer crashé ou fenêtre en cours de teardown → `send` jette synchroniquement, pollue les logs main-process et casse la session ; un canal non protégé = crash en cascade |
 
 ---
 
@@ -326,6 +328,8 @@ Format : `<type>(<scope>): <sujet>` + corps optionnel en français.
 - **CommonJS strict** dans `desktop/electron/` (suffixe `.cjs`). Mélanger ESM dans `desktop/` casse Electron.
 - Les modules loop sont **sans dépendance externe runtime** : ils n'importent que des types Node natifs. C'est ce qui permet `tsconfig.utils.json` de typer sans `node_modules` complets.
 - `humanGateIpc.cjs` est **fail-safe par construction** : toute erreur résout `'timeout'`, jamais d'exception.
+- **Buffers texte bornés** (`appendBoundedText`, P11) : utiliser systématiquement pour stdout/stderr et tout flux infini susceptible de transiter par IPC ; exporter le helper depuis un module neutre pour réutilisation (cf. `cliRunner.cjs:129`).
+- **Tout `webContents.send` passe par `createSendChannel`** (P12) : import depuis `desktop/electron/sendChannel.cjs`, jamais d'appel direct à `mainWindow.webContents.send` depuis les handlers IPC ; garantit le no-op sûr sur fenêtre détruite et évite les exceptions silencieuses.
 
 ---
 
