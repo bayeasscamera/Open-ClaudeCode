@@ -15,6 +15,8 @@ function createHarness(overrides = {}) {
       handle: (channel, handler) => {
         handlers[channel] = handler
       },
+      on: () => {},
+      removeHandler: () => {},
     },
     clipboard: {
       writeText: text => calls.push(['clipboard', text]),
@@ -365,4 +367,105 @@ test('ipc handlers restrict open-path targets and service probes', async () => {
   })
   assert.equal(probed.length, 1)
   assert.equal(probed[0].services.length, 1)
+})
+
+test('M1: ipc handler wrapper logs the channel name and re-throws on failure', async () => {
+  // The wrapper installed in ipcHandlers.cjs must (1) log via console.error
+  // with the channel name and the error message, and (2) re-throw so the
+  // renderer sees a precise rejection rather than a silent crash.
+  //
+  // We build a one-off harness inline so we can plug a throwing
+  // providerChecker.check into the registered opc:provider-check handler.
+  const handlers = {}
+  const captureIpcMain = {
+    handle: (channel, handler) => {
+      handlers[channel] = handler
+    },
+    on: () => {},
+    removeHandler: () => {},
+  }
+
+  registerIpcHandlers({
+    ipcMain: captureIpcMain,
+    clipboard: { writeText: () => true, readText: () => '' },
+    dialog: undefined,
+    shell: { openExternal: async () => {}, openPath: async () => '' },
+    startProviderBridge: async () => ({ port: 49152 }),
+    cliRunner: {
+      version: () => ({ ok: true, node: 'v22', cli: '/tmp/cli.js', version: '2.1.88' }),
+      runtimeStatus: () => ({ active: false }),
+      run: () => ({ ok: true }),
+      stop: () => true,
+      cleanupRuntime: () => ({ cleaned: true }),
+    },
+    providerConfigStore: {
+      reload: () => ({ baseUrl: '', defaultModel: '' }),
+      profiles: () => [],
+      editableConfig: () => ({ profiles: [] }),
+      repairKnownProviderIssues: () => ({ repaired: false, count: 0, changes: [] }),
+      exportConfig: () => ({ version: 1, profiles: [] }),
+      importConfig: () => ({ imported: {} }),
+      upsertProfile: () => ({ profile: {} }),
+      deleteProfile: () => ({ deleted: '' }),
+      setDefaultModel: () => ({ defaultModel: '' }),
+      quarantineProfiles: () => ({ config: {}, changed: 0 }),
+      restoreProfiles: () => ({ config: {}, changed: 0 }),
+    },
+    memoryStore: { info: () => ({ enabled: true }) },
+    desktopStateStore: {
+      read: () => ({ ok: true, state: {} }),
+      write: () => ({ ok: true }),
+      searchState: () => ({ ok: true }),
+    },
+    sessionStore: {
+      load: () => ({ ok: true, config: {} }),
+      save: () => ({ ok: true }),
+      markDone: () => ({ ok: true }),
+      clear: () => ({ ok: true }),
+    },
+    providerChecker: {
+      check: () => {
+        throw new Error('boom: provider-checker down')
+      },
+    },
+    providerModelDiscovery: {
+      discover: () => ({ ok: true, import: false }),
+      discoverAndImport: () => ({ ok: true, imported: true }),
+    },
+    doctor: { run: () => ({ ok: true }) },
+    promptRefiner: { refine: () => ({ ok: true }) },
+    projectRoot: () => '/tmp/project',
+  })
+
+  assert.ok(typeof handlers['opc:provider-check'] === 'function', 'opc:provider-check should be registered')
+
+  const originalError = console.error
+  const errorCalls = []
+  console.error = (...args) => {
+    errorCalls.push(args)
+  }
+
+  let thrown = null
+  try {
+    await handlers['opc:provider-check'](null, { model: 'mock/model' })
+  } catch (err) {
+    thrown = err
+  } finally {
+    console.error = originalError
+  }
+
+  assert.ok(thrown, 'wrapped handler should re-throw the original error')
+  assert.match(thrown.message, /boom: provider-checker down/)
+  assert.ok(
+    errorCalls.some(args =>
+      args.some(part => typeof part === 'string' && part.includes('opc:provider-check') && part.includes('threw')),
+    ),
+    'console.error should mention the channel name',
+  )
+  assert.ok(
+    errorCalls.some(args =>
+      args.some(part => typeof part === 'string' && part.includes('boom: provider-checker down')),
+    ),
+    'console.error should include the original error message',
+  )
 })
