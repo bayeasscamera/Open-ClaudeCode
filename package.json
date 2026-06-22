@@ -8,10 +8,14 @@
   "type": "commonjs",
   "scripts": {
     "typecheck:refactor": "tsc -p tsconfig.check.json --pretty false",
-    "verify:ci": "npm run typecheck:refactor && npm --prefix desktop run verify:ci"
+    "typecheck:utils": "tsc -p tsconfig.utils.json --pretty false",
+    "typecheck:loop-tests": "tsc -p tsconfig.loop-tests.json --pretty false",
+    "test:loop": "node --require ./test-shims/cjs-shim.cjs --import tsx --test src/utils/__tests__/*.test.ts",
+    "verify:ci": "npm run typecheck:refactor && npm run typecheck:utils && npm run typecheck:loop-tests && npm run test:loop && npm --prefix desktop run verify:ci"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   }
 }
