@@ -3,7 +3,7 @@ import chalk from 'chalk';
 import type { UUID } from 'crypto';
 import figures from 'figures';
 import * as React from 'react';
-import { getOriginalCwd, getSessionId } from '../../bootstrap/state.js';
+import { getOriginalCwd, getSessionId, setOriginalCwd, setProjectRoot, setCwdState } from '../../bootstrap/state.js';
 import type { CommandResultDisplay, ResumeEntrypoint } from '../../commands.js';
 import { LogSelector } from '../../components/LogSelector.js';
 import { MessageResponse } from '../../components/MessageResponse.js';
@@ -145,24 +145,17 @@ function ResumeCommand({
 
     // Check if this conversation is from a different directory
     const crossProjectCheck = checkCrossProjectResume(fullLog, showAllProjects, worktreePaths);
-    if (crossProjectCheck.isCrossProject) {
-      if (crossProjectCheck.isSameRepoWorktree) {
-        // Same repo worktree - can resume directly
-        setResuming(true);
-        void onResume(sessionId, fullLog, 'slash_command_picker');
+    if (crossProjectCheck.isCrossProject && fullLog.projectPath) {
+      try {
+        process.chdir(fullLog.projectPath);
+        setOriginalCwd(fullLog.projectPath);
+        setProjectRoot(fullLog.projectPath);
+        setCwdState(fullLog.projectPath);
+        process.stdout.write(chalk.green(`\n✔ Switched project directory to: ${fullLog.projectPath}\n`));
+      } catch (err) {
+        onDone(`Failed to switch directory to ${fullLog.projectPath}: ${(err as Error).message}`);
         return;
       }
-
-      // Different project - show command instead of resuming
-      const raw = await setClipboard(crossProjectCheck.command);
-      if (raw) process.stdout.write(raw);
-
-      // Format the output message
-      const message = ['', 'This conversation is from a different directory.', '', 'To resume, run:', `  ${crossProjectCheck.command}`, '', '(Command copied to clipboard)', ''].join('\n');
-      onDone(message, {
-        display: 'user'
-      });
-      return;
     }
 
     // Same directory - proceed with resume
