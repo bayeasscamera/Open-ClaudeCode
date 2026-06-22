@@ -1,24 +1,49 @@
 const fs = require('node:fs')
 const path = require('node:path')
-
-const MAX_PROMPT_CHARS = 500000
-const MAX_STRING_CHARS = 4096
-const MAX_TASKS = 20
-const MAX_SERVICES_PER_TASK = 20
-const MAX_PROJECT_CONTEXT_FILES = 20
-const TRUSTED_BYPASS_COMMANDS = [
-  'pnpm tools-dev start',
-  'pnpm tools-dev run web',
-  'pnpm tools-dev dev',
-  'npm run dev',
-  'npm run start',
-  'pnpm dev',
-  'pnpm start',
-]
-const PERMISSION_MODES = new Set(['default', 'acceptEdits', 'auto', 'plan', 'dontAsk', 'bypassPermissions'])
-const BYPASS_PERMISSION_MODES = new Set(['acceptEdits', 'auto', 'dontAsk', 'bypassPermissions'])
-const COMMAND_INTENT_SOURCES = new Set(['prompt', 'tool-history', 'message-intent'])
-const STATE_SEARCH_TYPES = new Set(['messages', 'project_files'])
+const {
+  BYPASS_PERMISSION_MODES,
+  COMMAND_INTENT_SOURCES,
+  DEFAULT_PERMISSION_MODE,
+  LOCAL_HTTP_HOSTNAMES,
+  MAX_ALLOWED_TOOLS,
+  MAX_BUDGET_USD,
+  MAX_COMMAND_CHARS,
+  MAX_DESCRIPTION_CHARS,
+  MAX_ERROR_CHARS,
+  MAX_HEADING_CHARS,
+  MAX_HEADINGS,
+  MAX_INDEXED_AT_CHARS,
+  MAX_KEYWORDS,
+  MAX_KEYWORD_CHARS,
+  MAX_LONG_TEXT_CHARS,
+  MAX_MEDIUM_TEXT_CHARS,
+  MAX_MODEL_CHARS,
+  MAX_PAUSE_MODELS,
+  MAX_PROJECT_CONTEXT_FILES,
+  MAX_PROMPT_CHARS,
+  MAX_QUERY_CHARS,
+  MAX_REASON_CHARS,
+  MAX_REFINE_PROMPT_CHARS,
+  MAX_SERVICES_PER_TASK,
+  MAX_SERVICE_NAME_CHARS,
+  MAX_SHORT_ID_CHARS,
+  MAX_SNIPPETS,
+  MAX_SNIPPET_CHARS,
+  MAX_STRING_CHARS,
+  MAX_SUMMARY_CHARS,
+  MAX_TASKS,
+  MAX_TAG_CHARS,
+  MAX_TOOL_NAME_CHARS,
+  MAX_TURNS,
+  PERMISSION_MODES,
+  PID_MAX,
+  PID_MIN,
+  STATE_SEARCH_DEFAULT_LIMIT,
+  STATE_SEARCH_LIMIT_MAX,
+  STATE_SEARCH_LIMIT_MIN,
+  STATE_SEARCH_TYPES,
+  TRUSTED_BYPASS_COMMANDS,
+} = require('./ipcValidation.constants.cjs')
 
 function text(value, max = MAX_STRING_CHARS) {
   return String(value || '')
@@ -46,23 +71,23 @@ function isSafeHttpUrl(value, { localOnly = false } = {}) {
     const url = new URL(String(value || ''))
     if (!['http:', 'https:'].includes(url.protocol)) return false
     if (!localOnly) return true
-    return ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'].includes(url.hostname)
+    return LOCAL_HTTP_HOSTNAMES.includes(url.hostname)
   } catch {
     return false
   }
 }
 
 function normalizePermissionMode(value) {
-  const mode = text(value, 40)
-  return PERMISSION_MODES.has(mode) ? mode : 'default'
+  const mode = text(value, MAX_TAG_CHARS)
+  return PERMISSION_MODES.has(mode) ? mode : DEFAULT_PERMISSION_MODE
 }
 
 function normalizeAllowedTools(value) {
   if (!Array.isArray(value)) return []
   return value
-    .map(item => text(item, 1000))
+    .map(item => text(item, MAX_TOOL_NAME_CHARS))
     .filter(Boolean)
-    .slice(0, 80)
+    .slice(0, MAX_ALLOWED_TOOLS)
 }
 
 function uniqueTools(value) {
@@ -70,7 +95,7 @@ function uniqueTools(value) {
 }
 
 function normalizeCommand(value) {
-  return text(value, 1000)
+  return text(value, MAX_COMMAND_CHARS)
     .replace(/^Commande:\s*/i, '')
     .replace(/^["'`]+|["'`]+$/g, '')
     .replace(/\s+/g, ' ')
@@ -102,18 +127,18 @@ function commandAllowRules(command) {
   return Array.from(rules)
 }
 
-function validateCommandIntent(value, permissionMode = 'default') {
+function validateCommandIntent(value, permissionMode = DEFAULT_PERMISSION_MODE) {
   const input = record(value)
   const command = normalizeCommand(input.command)
   if (!command) return null
-  const source = text(input.source, 40)
+  const source = text(input.source, MAX_TAG_CHARS)
   const allowRules = commandAllowRules(command)
   const trusted = Boolean(trustedBypassCommand(command))
   return {
     version: 1,
     command,
     source: COMMAND_INTENT_SOURCES.has(source) ? source : 'prompt',
-    reason: text(input.reason, 240),
+    reason: text(input.reason, MAX_REASON_CHARS),
     trusted,
     longRunning: isLongRunningCommand(command),
     permissionMode,
@@ -134,21 +159,41 @@ function number(value) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
 }
 
+// Clamp maxTurns to a sane integer range. Claude Code rejects >999 turns;
+// we cap at MAX_TURNS to keep the value predictable across providers. Null/undefined/NaN
+// resolve to null so the CLI can omit --max-turns entirely.
+function normalizeMaxTurns(value) {
+  if (value == null || value === '') return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+  return Math.min(Math.floor(parsed), MAX_TURNS)
+}
+
+// Bound maxBudgetUsd to a positive finite USD value, capped to avoid
+// pathological inputs (e.g. Number.MAX_VALUE). Null/undefined/NaN/<=0 resolve
+// to null so the CLI can omit --max-budget-tokens entirely.
+function normalizeMaxBudgetUsd(value) {
+  if (value == null || value === '') return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+  return Math.min(parsed, MAX_BUDGET_USD)
+}
+
 function normalizeProjectRuntimeFile(value) {
   const input = record(value)
   const path = text(input.path, MAX_STRING_CHARS)
   if (!path) return null
   return {
-    id: text(input.id, 120),
-    name: text(input.name || path, 240),
+    id: text(input.id, MAX_SHORT_ID_CHARS),
+    name: text(input.name || path, MAX_MEDIUM_TEXT_CHARS),
     path,
-    role: text(input.role, 40),
-    summary: text(input.summary, 1200),
-    snippets: Array.isArray(input.snippets) ? input.snippets.map(item => text(item, 300)).filter(Boolean).slice(0, 4) : [],
-    keywords: Array.isArray(input.keywords) ? input.keywords.map(item => text(item, 80)).filter(Boolean).slice(0, 10) : [],
-    headings: Array.isArray(input.headings) ? input.headings.map(item => text(item, 180)).filter(Boolean).slice(0, 6) : [],
-    indexedAt: text(input.indexedAt, 120),
-    error: text(input.error, 400),
+    role: text(input.role, MAX_TAG_CHARS),
+    summary: text(input.summary, MAX_SUMMARY_CHARS),
+    snippets: Array.isArray(input.snippets) ? input.snippets.map(item => text(item, MAX_SNIPPET_CHARS)).filter(Boolean).slice(0, MAX_SNIPPETS) : [],
+    keywords: Array.isArray(input.keywords) ? input.keywords.map(item => text(item, MAX_KEYWORD_CHARS)).filter(Boolean).slice(0, MAX_KEYWORDS) : [],
+    headings: Array.isArray(input.headings) ? input.headings.map(item => text(item, MAX_HEADING_CHARS)).filter(Boolean).slice(0, MAX_HEADINGS) : [],
+    indexedAt: text(input.indexedAt, MAX_INDEXED_AT_CHARS),
+    error: text(input.error, MAX_ERROR_CHARS),
     lineCount: number(input.lineCount),
     wordCount: number(input.wordCount),
     score: number(input.score),
@@ -163,19 +208,19 @@ function normalizeProjectRuntimeFiles(value) {
 
 function validateProjectRuntimeContext(value) {
   const input = record(value)
-  const projectId = text(input.projectId, 120)
-  const projectName = text(input.projectName, 240)
+  const projectId = text(input.projectId, MAX_SHORT_ID_CHARS)
+  const projectName = text(input.projectName, MAX_MEDIUM_TEXT_CHARS)
   const attachedFiles = normalizeProjectRuntimeFiles(input.attachedFiles)
   const readNextFiles = normalizeProjectRuntimeFiles(input.readNextFiles)
   const relevantFiles = normalizeProjectRuntimeFiles(input.relevantFiles)
   if (!projectId && !projectName && !attachedFiles.length && !readNextFiles.length && !relevantFiles.length) return null
   return {
     version: 1,
-    generatedAt: text(input.generatedAt, 120),
-    query: text(input.query, 600),
+    generatedAt: text(input.generatedAt, MAX_INDEXED_AT_CHARS),
+    query: text(input.query, MAX_QUERY_CHARS),
     projectId,
     projectName,
-    description: text(input.description, 800),
+    description: text(input.description, MAX_DESCRIPTION_CHARS),
     memoryChars: number(input.memoryChars),
     instructionChars: number(input.instructionChars),
     totalFiles: number(input.totalFiles),
@@ -226,25 +271,26 @@ function trustedBypassAllowed(payload) {
 function validateRunPayload(value) {
   const input = record(value)
   const prompt = text(input.prompt, MAX_PROMPT_CHARS)
-  if (!prompt) throw new Error('Prompt vide.')
+  if (!prompt && !input.sessionId) throw new Error('Prompt vide.')
   const payload = {
-    taskId: text(input.taskId, 120),
-    assistantId: text(input.assistantId, 120),
-    chatId: text(input.chatId, 120),
+    taskId: text(input.taskId, MAX_SHORT_ID_CHARS),
+    assistantId: text(input.assistantId, MAX_SHORT_ID_CHARS),
+    chatId: text(input.chatId, MAX_SHORT_ID_CHARS),
     prompt,
     displayPrompt: text(input.displayPrompt || prompt, MAX_PROMPT_CHARS),
     cwd: pathText(input.cwd, MAX_STRING_CHARS),
-    model: text(input.model, 256),
+    model: text(input.model, MAX_MODEL_CHARS),
     permissionMode: normalizePermissionMode(input.permissionMode),
-    sessionId: text(input.sessionId, 256),
+    sessionId: text(input.sessionId, MAX_LONG_TEXT_CHARS),
     trustedWorkspaceRoot: pathText(input.trustedWorkspaceRoot, MAX_STRING_CHARS),
     workspaceTrusted: false,
     allowedTools: normalizeAllowedTools(input.allowedTools),
     skipPermissions: false,
     memoryEnabled: input.memoryEnabled !== false,
     bare: input.bare !== false,
-    effort: text(input.effort, 40),
-    maxTurns: text(input.maxTurns, 20),
+    effort: text(input.effort, MAX_TAG_CHARS),
+    maxTurns: normalizeMaxTurns(input.maxTurns),
+    maxBudgetUsd: normalizeMaxBudgetUsd(input.maxBudgetUsd),
     settingsPath: '',
     projectRuntimeContext: validateProjectRuntimeContext(input.projectRuntimeContext),
   }
@@ -275,18 +321,18 @@ function validateSettingsPath(value, cwd) {
 }
 
 function validateProviderCheckPayload(value) {
-  const model = text(record(value).model, 256)
+  const model = text(record(value).model, MAX_MODEL_CHARS)
   return { model }
 }
 
 function validateProviderDiscoveryPayload(value) {
   const input = record(value)
   return {
-    model: text(input.model || input.sourceModel, 256),
+    model: text(input.model || input.sourceModel, MAX_MODEL_CHARS),
     baseUrl: text(input.baseUrl, MAX_STRING_CHARS),
-    providerName: text(input.providerName || input.provider, 256),
-    upstreamApi: text(input.upstreamApi, 80),
-    transport: text(input.transport, 40),
+    providerName: text(input.providerName || input.provider, MAX_MODEL_CHARS),
+    upstreamApi: text(input.upstreamApi, MAX_KEYWORD_CHARS),
+    transport: text(input.transport, MAX_TAG_CHARS),
     timeoutMs: number(input.timeoutMs),
     checkTimeoutMs: number(input.checkTimeoutMs),
     retries: number(input.retries),
@@ -301,11 +347,11 @@ function validateProviderDiscoveryPayload(value) {
 function validateProviderPausePayload(value) {
   const input = record(value)
   const models = Array.isArray(input.models)
-    ? input.models.map(item => text(item, 256)).filter(Boolean).slice(0, 80)
-    : [text(input.model || input.id, 256)].filter(Boolean)
+    ? input.models.map(item => text(item, MAX_MODEL_CHARS)).filter(Boolean).slice(0, MAX_PAUSE_MODELS)
+    : [text(input.model || input.id, MAX_MODEL_CHARS)].filter(Boolean)
   return {
     models,
-    reason: text(input.reason, 1000),
+    reason: text(input.reason, MAX_COMMAND_CHARS),
   }
 }
 
@@ -313,39 +359,39 @@ function validateDoctorPayload(value) {
   const input = record(value)
   return {
     cwd: pathText(input.cwd, MAX_STRING_CHARS),
-    model: text(input.model, 256),
+    model: text(input.model, MAX_MODEL_CHARS),
   }
 }
 
 function validateStateSearchPayload(value) {
   const input = record(value)
-  const type = text(input.type, 40)
+  const type = text(input.type, MAX_TAG_CHARS)
   return {
     type: STATE_SEARCH_TYPES.has(type) ? type : 'messages',
-    query: text(input.query, 1000),
-    limit: Math.max(1, Math.min(50, Number(input.limit) || 10)),
-    chatId: text(input.chatId, 160),
+    query: text(input.query, MAX_COMMAND_CHARS),
+    limit: Math.max(STATE_SEARCH_LIMIT_MIN, Math.min(STATE_SEARCH_LIMIT_MAX, Number(input.limit) || STATE_SEARCH_DEFAULT_LIMIT)),
+    chatId: text(input.chatId, MAX_MEDIUM_TEXT_CHARS),
   }
 }
 
 function validateRefinePromptPayload(value) {
   const input = record(value)
-  const prompt = text(input.prompt, 20000)
+  const prompt = text(input.prompt, MAX_REFINE_PROMPT_CHARS)
   if (!prompt) throw new Error('Prompt vide.')
   return {
     prompt,
-    model: text(input.model, 256),
+    model: text(input.model, MAX_MODEL_CHARS),
   }
 }
 
 function validateKillPidPayload(value) {
   const input = record(value)
   const pid = Number(input.pid)
-  if (!Number.isInteger(pid) || pid <= 1 || pid > Number.MAX_SAFE_INTEGER) return { pid: 0 }
+  if (!Number.isInteger(pid) || pid <= PID_MIN || pid > PID_MAX) return { pid: 0 }
   const command = normalizeCommand(input.command)
   return {
     pid,
-    taskId: text(input.taskId, 120),
+    taskId: text(input.taskId, MAX_SHORT_ID_CHARS),
     command,
     cwd: pathText(input.cwd, MAX_STRING_CHARS),
     longRunning: isLongRunningCommand(command),
@@ -369,7 +415,7 @@ function normalizeService(service) {
   const url = text(input.url, MAX_STRING_CHARS)
   const port = Number(input.port)
   const normalized = {
-    name: text(input.name, 80),
+    name: text(input.name, MAX_SERVICE_NAME_CHARS),
     url: '',
     port: Number.isInteger(port) && port > 0 && port <= 65535 ? port : 0,
   }
@@ -391,7 +437,7 @@ function validateProbeServicesPayload(value) {
     tasks: tasks.slice(0, MAX_TASKS).map(task => {
       const input = record(task)
       return {
-        id: text(input.id, 120),
+        id: text(input.id, MAX_SHORT_ID_CHARS),
         services: (Array.isArray(input.services) ? input.services : [])
           .slice(0, MAX_SERVICES_PER_TASK)
           .map(normalizeService)
@@ -417,4 +463,48 @@ module.exports = {
   validateCommandIntent,
   validateProjectRuntimeContext,
   validateRunPayload,
+  // Re-export constants for callers / tests that want to align bounds
+  // with what the IPC layer actually enforces.
+  BYPASS_PERMISSION_MODES,
+  COMMAND_INTENT_SOURCES,
+  DEFAULT_PERMISSION_MODE,
+  LOCAL_HTTP_HOSTNAMES,
+  MAX_ALLOWED_TOOLS,
+  MAX_BUDGET_USD,
+  MAX_COMMAND_CHARS,
+  MAX_DESCRIPTION_CHARS,
+  MAX_ERROR_CHARS,
+  MAX_HEADING_CHARS,
+  MAX_HEADINGS,
+  MAX_INDEXED_AT_CHARS,
+  MAX_KEYWORDS,
+  MAX_KEYWORD_CHARS,
+  MAX_LONG_TEXT_CHARS,
+  MAX_MEDIUM_TEXT_CHARS,
+  MAX_MODEL_CHARS,
+  MAX_PAUSE_MODELS,
+  MAX_PROJECT_CONTEXT_FILES,
+  MAX_PROMPT_CHARS,
+  MAX_QUERY_CHARS,
+  MAX_REASON_CHARS,
+  MAX_REFINE_PROMPT_CHARS,
+  MAX_SERVICES_PER_TASK,
+  MAX_SERVICE_NAME_CHARS,
+  MAX_SHORT_ID_CHARS,
+  MAX_SNIPPETS,
+  MAX_SNIPPET_CHARS,
+  MAX_STRING_CHARS,
+  MAX_SUMMARY_CHARS,
+  MAX_TASKS,
+  MAX_TAG_CHARS,
+  MAX_TOOL_NAME_CHARS,
+  MAX_TURNS,
+  PERMISSION_MODES,
+  PID_MAX,
+  PID_MIN,
+  STATE_SEARCH_DEFAULT_LIMIT,
+  STATE_SEARCH_LIMIT_MAX,
+  STATE_SEARCH_LIMIT_MIN,
+  STATE_SEARCH_TYPES,
+  TRUSTED_BYPASS_COMMANDS,
 }
