@@ -33,6 +33,11 @@ const IPC_INVOKE_CHANNELS = Object.freeze([
   'opc:provider-default',
   'opc:provider-quarantine',
   'opc:provider-restore',
+  'opc:session-list',
+  'opc:session-mark-done',
+  'opc:session-config',
+  'opc:loop-event:ping',
+  'opc:human-gate-ask',
 ])
 
 const IPC_EVENT_CHANNELS = Object.freeze([
@@ -40,6 +45,9 @@ const IPC_EVENT_CHANNELS = Object.freeze([
   'opc:event',
   'opc:run-end',
   'opc:runtime',
+  'opc:resume-available',
+  'opc:human-gate-prompt',
+  'opc:loop-event',
 ])
 
 const PRELOAD_INVOKE_METHODS = Object.freeze({
@@ -77,6 +85,11 @@ const PRELOAD_INVOKE_METHODS = Object.freeze({
   setDefaultProvider: 'opc:provider-default',
   quarantineProviders: 'opc:provider-quarantine',
   restoreProviders: 'opc:provider-restore',
+  sessionList: 'opc:session-list',
+  sessionMarkDone: 'opc:session-mark-done',
+  sessionConfig: 'opc:session-config',
+  loopEventPing: 'opc:loop-event:ping',
+  humanGateAsk: 'opc:human-gate-ask',
 })
 
 const PRELOAD_EVENT_METHODS = Object.freeze({
@@ -84,11 +97,53 @@ const PRELOAD_EVENT_METHODS = Object.freeze({
   onEvent: 'opc:event',
   onRunEnd: 'opc:run-end',
   onRuntime: 'opc:runtime',
+  onResumeAvailable: 'opc:resume-available',
+  onHumanGatePrompt: 'opc:human-gate-prompt',
+  onLoopEvent: 'opc:loop-event',
 })
+
+// Validate a renderer-bound contract payload against the canonical whitelist.
+// The sandboxed preload cannot `require()` this file directly, so we embed
+// the whitelist inside the contract payload (built by windowManager.cjs) and
+// call this validator on the parsed payload. This stops a tampered CLI arg
+// from injecting arbitrary `opc:*` channels into the renderer's contextBridge.
+function validateIpcContract(contract) {
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract)) {
+    throw new Error('Invalid OPC IPC contract: not an object.')
+  }
+  const { invokeMethods, eventMethods } = contract
+  if (!invokeMethods || typeof invokeMethods !== 'object' || Array.isArray(invokeMethods)) {
+    throw new Error('Invalid OPC IPC contract.invokeMethods.')
+  }
+  if (!eventMethods || typeof eventMethods !== 'object' || Array.isArray(eventMethods)) {
+    throw new Error('Invalid OPC IPC contract.eventMethods.')
+  }
+  for (const [method, channel] of Object.entries(invokeMethods)) {
+    if (!method || typeof channel !== 'string') {
+      throw new Error(`Invalid OPC IPC invoke method entry: ${JSON.stringify(method)}.`)
+    }
+    if (!IPC_INVOKE_CHANNELS.includes(channel)) {
+      throw new Error(`OPC IPC invoke channel "${channel}" is not in the canonical whitelist.`)
+    }
+  }
+  for (const [method, channel] of Object.entries(eventMethods)) {
+    if (!method || typeof channel !== 'string') {
+      throw new Error(`Invalid OPC IPC event method entry: ${JSON.stringify(method)}.`)
+    }
+    if (!IPC_EVENT_CHANNELS.includes(channel)) {
+      throw new Error(`OPC IPC event channel "${channel}" is not in the canonical whitelist.`)
+    }
+  }
+  return {
+    invokeMethods: { ...invokeMethods },
+    eventMethods: { ...eventMethods },
+  }
+}
 
 module.exports = {
   IPC_EVENT_CHANNELS,
   IPC_INVOKE_CHANNELS,
   PRELOAD_EVENT_METHODS,
   PRELOAD_INVOKE_METHODS,
+  validateIpcContract,
 }

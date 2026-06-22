@@ -1,4 +1,9 @@
 const { isSafeHttpUrl } = require('./ipcValidation.cjs')
+const {
+  IPC_EVENT_CHANNELS,
+  IPC_INVOKE_CHANNELS,
+  validateIpcContract,
+} = require('./ipcContract.cjs')
 
 const IPC_CONTRACT_ARGUMENT = '--opc-ipc-contract='
 
@@ -13,9 +18,21 @@ function isSafeExternalUrl(value) {
 }
 
 function preloadIpcContractArgument(contract = {}) {
-  const payload = {
+  // Validate against the canonical whitelist before embedding. The whitelist
+  // is shipped inside the contract payload itself so the sandboxed preload
+  // can re-validate without needing to `require()` ipcContract.cjs (which is
+  // not available in preload's sandbox context).
+  const validated = validateIpcContract({
     invokeMethods: contract.PRELOAD_INVOKE_METHODS || contract.invokeMethods || {},
     eventMethods: contract.PRELOAD_EVENT_METHODS || contract.eventMethods || {},
+  })
+  const payload = {
+    invokeMethods: validated.invokeMethods,
+    eventMethods: validated.eventMethods,
+    whitelist: {
+      invokeChannels: [...IPC_INVOKE_CHANNELS],
+      eventChannels: [...IPC_EVENT_CHANNELS],
+    },
   }
   return `${IPC_CONTRACT_ARGUMENT}${encodeURIComponent(JSON.stringify(payload))}`
 }

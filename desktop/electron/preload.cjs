@@ -6,22 +6,38 @@ function parseIpcContract(argv = []) {
   const arg = (Array.isArray(argv) ? argv : []).find(item => String(item).startsWith(IPC_CONTRACT_ARGUMENT))
   if (!arg) throw new Error('Missing OPC IPC contract for sandboxed preload.')
 
-  const raw = decodeURIComponent(String(arg).slice(IPC_CONTRACT_ARGUMENT.length))
-  const parsed = JSON.parse(raw)
+  let parsed
+  try {
+    const raw = decodeURIComponent(String(arg).slice(IPC_CONTRACT_ARGUMENT.length))
+    parsed = JSON.parse(raw)
+  } catch (error) {
+    throw new Error(`Malformed OPC IPC contract JSON: ${error.message}`)
+  }
   const invokeMethods = parsed?.invokeMethods
   const eventMethods = parsed?.eventMethods
-  validateMethodMap('invokeMethods', invokeMethods)
-  validateMethodMap('eventMethods', eventMethods)
+  const whitelist = parsed?.whitelist
+  validateMethodMap('invokeMethods', invokeMethods, whitelist?.invokeChannels)
+  validateMethodMap('eventMethods', eventMethods, whitelist?.eventChannels)
   return { PRELOAD_EVENT_METHODS: eventMethods, PRELOAD_INVOKE_METHODS: invokeMethods }
 }
 
-function validateMethodMap(name, value) {
+function validateMethodMap(name, value, allowedChannels) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`Invalid OPC IPC ${name} contract.`)
   }
+  // The whitelist is shipped inside the contract payload by windowManager.cjs.
+  // When present, every channel must belong to it. When absent (older main
+  // process), we fall back to the prefix check to preserve compatibility —
+  // main process validation remains the source of truth in that fallback.
+  const allowed = Array.isArray(allowedChannels) ? new Set(allowedChannels) : null
   for (const [method, channel] of Object.entries(value)) {
     if (!method || typeof channel !== 'string' || !channel.startsWith('opc:')) {
       throw new Error(`Invalid OPC IPC channel for ${name}.${method}.`)
+    }
+    if (allowed && !allowed.has(channel)) {
+      throw new Error(
+        `OPC IPC channel "${channel}" for ${name}.${method} is not in the canonical whitelist.`,
+      )
     }
   }
 }
@@ -82,4 +98,11 @@ contextBridge.exposeInMainWorld('opc', {
   onEvent: subscribe('onEvent'),
   onRunEnd: subscribe('onRunEnd'),
   onRuntime: subscribe('onRuntime'),
+  onResumeAvailable: subscribe('onResumeAvailable'),
+  onHumanGatePrompt: subscribe('onHumanGatePrompt'),
+  onLoopEvent: subscribe('onLoopEvent'),
+  sessionList: invokeNoPayload('sessionList'),
+  sessionMarkDone: invoke('sessionMarkDone'),
+  sessionConfig: invoke('sessionConfig'),
+  humanGateAsk: invoke('humanGateAsk'),
 })

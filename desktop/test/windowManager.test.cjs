@@ -6,6 +6,16 @@ const {
   isSafeExternalUrl,
   preloadIpcContractArgument,
 } = require('../electron/windowManager.cjs')
+const {
+  IPC_EVENT_CHANNELS,
+  IPC_INVOKE_CHANNELS,
+  PRELOAD_EVENT_METHODS,
+  PRELOAD_INVOKE_METHODS,
+} = require('../electron/ipcContract.cjs')
+
+function decodeContract(arg) {
+  return JSON.parse(decodeURIComponent(arg.slice(IPC_CONTRACT_ARGUMENT.length)))
+}
 
 test('window manager only opens safe external URLs', () => {
   assert.equal(isSafeExternalUrl('https://example.com/docs'), true)
@@ -52,11 +62,18 @@ test('window manager passes ipc contract to sandboxed preload', () => {
   }
   const arg = preloadIpcContractArgument(contract)
   assert.match(arg, new RegExp(`^${IPC_CONTRACT_ARGUMENT}`))
-  const payload = JSON.parse(decodeURIComponent(arg.slice(IPC_CONTRACT_ARGUMENT.length)))
-  assert.deepEqual(payload, {
-    invokeMethods: { health: 'opc:health' },
-    eventMethods: { onEvent: 'opc:event' },
-  })
+  const payload = decodeContract(arg)
+  assert.deepEqual(payload.invokeMethods, { health: 'opc:health' })
+  assert.deepEqual(payload.eventMethods, { onEvent: 'opc:event' })
+  // Whitelist MUST be embedded so the sandboxed preload can re-validate.
+  assert.deepEqual(
+    payload.whitelist.invokeChannels.slice().sort(),
+    IPC_INVOKE_CHANNELS.slice().sort(),
+  )
+  assert.deepEqual(
+    payload.whitelist.eventChannels.slice().sort(),
+    IPC_EVENT_CHANNELS.slice().sort(),
+  )
 
   let createdOptions = null
   class BrowserWindow {
@@ -79,3 +96,37 @@ test('window manager passes ipc contract to sandboxed preload', () => {
   assert.equal(createdOptions.webPreferences.sandbox, true)
   assert.deepEqual(createdOptions.webPreferences.additionalArguments, [arg])
 })
+
+// ── P34 — defense against tampered preloadContract (whitelist gate) ────────
+
+test('window manager rejects preloadContract whose invoke channels leak outside the whitelist', () => {
+  assert.throws(
+    () => preloadIpcContractArgument({
+      PRELOAD_INVOKE_METHODS: { run: 'opc:run', rogue: 'opc:custom-evil-channel' },
+      PRELOAD_EVENT_METHODS: { ...PRELOAD_EVENT_METHODS },
+    }),
+    /canonical whitelist/,
+  )
+})
+
+test('window manager rejects preloadContract whose event channels leak outside the whitelist', () => {
+  assert.throws(
+    () => preloadIpcContractArgument({
+      PRELOAD_INVOKE_METHODS: { ...PRELOAD_INVOKE_METHODS },
+      PRELOAD_EVENT_METHODS: { onEvil: 'opc:custom-evil-event' },
+    }),
+    /canonical whitelist/,
+  )
+})
+
+test('window manager accepts the canonical preload contract', () => {
+  // Round-trip: must not throw on the full contract used by main.cjs.
+  const arg = preloadIpcContractArgument({
+    PRELOAD_INVOKE_METHODS,
+    PRELOAD_EVENT_METHODS,
+  })
+  const payload = decodeContract(arg)
+  assert.equal(payload.invokeMethods.run, 'opc:run')
+  assert.equal(payload.eventMethods.onEvent, 'opc:event')
+})
+
