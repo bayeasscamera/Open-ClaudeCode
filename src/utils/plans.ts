@@ -21,6 +21,7 @@ import { getFsImplementation } from './fsOperations.js'
 import { logError } from './log.js'
 import { getInitialSettings } from './settings/settings.js'
 import { generateWordSlug } from './words.js'
+import { initTasks } from './taskChecklist.js'
 
 const MAX_SLUG_RETRIES = 10
 
@@ -173,6 +174,12 @@ export async function copyPlanForResume(
   // Set the slug for the target session ID (or current if not provided)
   const sessionId = targetSessionId ?? getSessionId()
   setPlanSlug(sessionId, slug)
+
+  try {
+    initTasks()
+  } catch (err) {
+    logError(err)
+  }
 
   // Attempt to read the plan file directly — recovery triggers on ENOENT.
   const planPath = join(getPlansDirectory(), `${slug}.md`)

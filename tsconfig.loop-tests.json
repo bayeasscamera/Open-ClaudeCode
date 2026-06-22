@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.check.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "src/utils/__typestubs__/external-deps.d.ts",
+    "src/utils/__tests__/mockProvider.ts",
+    "src/utils/__tests__/loopStop.test.ts",
+    "src/utils/__tests__/loopBudget.test.ts",
+    "src/utils/__tests__/loopEvents.test.ts",
+    "src/utils/__tests__/loopEventJsonl.test.ts",
+    "src/utils/__tests__/contextBudget.test.ts",
+    "src/utils/__tests__/contextCompactor.test.ts",
+    "src/utils/__tests__/runner-smoke.test.ts"
+  ]
+}

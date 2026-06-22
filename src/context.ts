@@ -152,6 +152,9 @@ export const getSystemContext = memoize(
 /**
  * This context is prepended to each conversation, and cached for the duration of the conversation.
  */
+import { getMemory } from './utils/memory.js'
+import { getTasks } from './utils/taskChecklist.js'
+
 export const getUserContext = memoize(
   async (): Promise<{
     [k: string]: string
@@ -175,6 +178,21 @@ export const getUserContext = memoize(
     // cycle through permissions/filesystem → permissions → yoloClassifier).
     setCachedClaudeMdContent(claudeMd || null)
 
+    // Load long-term memory and active task checklist
+    const memory = getMemory()
+    const tasks = getTasks()
+    
+    let tasksContext = ''
+    if (tasks.length > 0) {
+      tasksContext = 'Statut actuel des tâches du projet :\n'
+      tasks.forEach((t) => {
+        let mark = '[ ]';
+        if (t.status === 'done') mark = '[x]';
+        if (t.status === 'in_progress') mark = '[/]';
+        tasksContext += `${mark} ${t.text}\n`;
+      });
+    }
+
     logForDiagnosticsNoPII('info', 'user_context_completed', {
       duration_ms: Date.now() - startTime,
       claudemd_length: claudeMd?.length ?? 0,
@@ -184,6 +202,8 @@ export const getUserContext = memoize(
     return {
       ...(claudeMd && { claudeMd }),
       currentDate: `Today's date is ${getLocalISODate()}.`,
+      ...(memory && { projectMemory: `Mémoire à long terme du projet :\n${memory}` }),
+      ...(tasksContext && { projectTasks: tasksContext }),
     }
   },
 )

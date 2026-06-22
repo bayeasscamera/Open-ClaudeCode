@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.check.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "src/utils/memory.ts",
+    "src/utils/taskChecklist.ts",
+    "src/utils/verification.ts",
+    "src/utils/criteria.ts",
+    "src/utils/contextBudget.ts",
+    "src/utils/contextCompactor.ts",
+    "src/utils/loopRunner.ts",
+    "src/utils/loopRunner.example.ts",
+    "src/utils/loopReasoner.ts",
+    "src/utils/humanInTheLoop.ts",
+    "src/utils/loopBudget.ts",
+    "src/utils/loopStop.ts",
+    "src/utils/loopEvents.ts",
+    "src/utils/loopEventJsonl.ts",
+    "src/utils/toolRegistry.ts",
+    "src/utils/__typestubs__/external-deps.d.ts"
+  ]
+}
