@@ -9,6 +9,7 @@ const {
   createCliRunner,
   resolveCwd,
   stripPathShellQuotes,
+  tailText,
   toolIdleTimeoutMs,
 } = require('../electron/cliRunner.cjs')
 
@@ -44,6 +45,16 @@ if (prompt === 'sleep') {
 	  console.log('x'.repeat(1024 * 1024 + 20000))
 	  console.error('e'.repeat(300000))
 	  console.log(JSON.stringify({ type: 'result', result: 'Bounded OK', is_error: false }))
+	} else if (prompt === 'huge-line') {
+	  // Sprint 4 / H1: emit a single huge line with no newline. The runner
+	  // must bound the partial-line buffer to MAX_STDOUT_CHARS instead of
+	  // accumulating until the line completes.
+	  process.stdout.write('y'.repeat(2 * 1024 * 1024))
+	  console.log(JSON.stringify({ type: 'result', result: 'Huge line OK', is_error: false }))
+	} else if (prompt === 'huge-stderr') {
+	  console.log(JSON.stringify({ type: 'system', subtype: 'init', cwd: process.cwd(), model: process.env.ANTHROPIC_MODEL, permissionMode: 'acceptEdits', tools: ['Bash'] }))
+	  console.error('e'.repeat(60 * 1024))
+	  console.log(JSON.stringify({ type: 'result', result: 'ok', is_error: false }))
 	} else if (prompt === 'stderr-fail') {
 	  console.error('mock fatal: provider rejected unsupported parameter')
 	  process.exit(1)
@@ -345,3 +356,130 @@ test('cli runner includes stderr details in run-end failures', async () => {
   assert.equal(end.code, 1)
   assert.match(end.stderr, /provider rejected unsupported parameter/)
 })
+
+// ── P14 — cap individual stderr event payloads sent to the renderer ───────
+
+test('cli runner: tailText caps long strings with an ellipsis prefix', () => {
+  const short = 'short message'
+  assert.equal(tailText(short), short)
+  assert.equal(tailText(''), '')
+  // Defaults to MAX_STDERR_EVENT_CHARS (32 KiB).
+  const huge = 'x'.repeat(40 * 1024)
+  const tailed = tailText(huge)
+  assert.ok(tailed.length <= 32 * 1024, `tailed length ${tailed.length} must be ≤ 32 KiB`)
+  assert.match(tailed, /^\.\.\./)
+})
+
+test('cli runner: tailText respects a custom maxChars override', () => {
+  const input = 'a'.repeat(100)
+  const tailed = tailText(input, 10)
+  assert.equal(tailed.length, 10)
+  assert.match(tailed, /^\.\.\./)
+  assert.equal(tailed, '...aaaaaaa')
+})
+
+test('cli runner: stderr event payload is bounded for runaway lines', async () => {
+  const fixture = createFixture()
+  const events = []
+  const runner = createRunner(fixture, events, [])
+
+  runner.run({
+    prompt: 'huge-stderr',
+    cwd: fixture.root,
+    model: 'mock/model',
+    permissionMode: 'acceptEdits',
+  })
+
+  await new Promise(resolve => {
+    const startedAt = Date.now()
+    const tick = setInterval(() => {
+      const ended = events.some(([ch]) => ch === 'opc:run-end')
+      if (ended || Date.now() - startedAt > 5000) {
+        clearInterval(tick)
+        resolve()
+      }
+    }, 20)
+  })
+
+  const stderrEvents = events.filter(
+    ([ch, payload]) => ch === 'opc:event' && payload?.type === 'stderr',
+  )
+  assert.ok(stderrEvents.length > 0, 'expected at least one stderr event')
+  for (const [, payload] of stderrEvents) {
+    assert.ok(
+      payload.text.length <= 32 * 1024,
+      `stderr event text must be ≤ 32 KiB, got ${payload.text.length}`,
+    )
+    assert.equal(payload.truncated, true)
+    assert.match(payload.text, /^\.\.\./)
+  }
+})
+
+// ── Sprint 4 / H1 — bound the partial-line stdout buffer ─────────────────
+
+test('cli runner: stdout partial-line buffer is capped at MAX_STDOUT_CHARS', async () => {
+  const fixture = createFixture()
+  const events = []
+  const memoryWrites = []
+  const runner = createRunner(fixture, events, memoryWrites)
+
+  runner.run({
+    prompt: 'huge-line',
+    cwd: fixture.root,
+    model: 'mock/model',
+    permissionMode: 'acceptEdits',
+  })
+
+  await waitForRunEnd(events)
+
+  // The 2 MiB single-line write should NOT exhaust memory: the partial
+  // buffer is bounded to MAX_STDOUT_CHARS (1 MiB), and the line is then
+  // trimmed to the last 1 MiB before being shipped to the renderer.
+  assert.equal(memoryWrites.length, 1)
+  const recorded = memoryWrites[0][0]
+  assert.ok(
+    recorded.stdout.length <= 1024 * 1024,
+    `recorded stdout must be ≤ 1 MiB, got ${recorded.stdout.length}`,
+  )
+})
+
+// ── Sprint 4 / H2 — linger timers are cancelled on child close ────────────
+
+test('cli runner: linger timers are cancelled once the child exits', async () => {
+  const fixture = createFixture()
+  const events = []
+  const runner = createRunner(fixture, events, [])
+
+  // 'OK' emits init, assistant, result, then exits naturally. The result
+  // path schedules linger timers in `stopLingeringRun`; we expect them to
+  // be cancelled by the new `clearLingerTimers` call inside
+  // `child.on('close')` instead of waiting for natural wake-up at 2.5s.
+  runner.run({
+    prompt: 'OK',
+    cwd: fixture.root,
+    model: 'mock/model',
+    permissionMode: 'acceptEdits',
+  })
+
+  const end = await waitForRunEnd(events)
+  // After run-end the runner must be idle and accept a new run immediately
+  // (no lingering 2.5s timer holding a closure on the dead run).
+  assert.equal(runner.hasActiveRun(), false)
+  assert.equal(end.reason, 'result')
+  assert.equal(end.code, 0)
+
+  // Wait past LINGER_KILL_DELAY_MS (2.5s) — if the linger timers were
+  // NOT cancelled, they'd fire here and (in the supervisor mock) potentially
+  // touch dead state. The runner must remain stable and accept a new run.
+  await new Promise(resolve => setTimeout(resolve, 100))
+  assert.equal(runner.hasActiveRun(), false)
+  assert.doesNotThrow(() => {
+    runner.run({
+      prompt: 'OK',
+      cwd: fixture.root,
+      model: 'mock/model',
+      permissionMode: 'acceptEdits',
+    })
+  })
+})
+

@@ -5,15 +5,27 @@ const path = require('node:path')
 const { createRuntimeSupervisor } = require('./runtimeSupervisor.cjs')
 const { compactEvent, extractRunResult } = require('./cliEventParser.cjs')
 const longRunningToolMonitor = require('./longRunningToolMonitor.cjs')
-
-const DEFAULT_IDLE_TIMEOUT_MS = 300000
-const DEFAULT_LONG_TOOL_IDLE_TIMEOUT_MS = 1800000
-const MAX_TOOL_IDLE_TIMEOUT_MS = 7200000
-const IDLE_CHECK_INTERVAL_MS = 5000
-const DEFAULT_LOCAL_CWD = process.env.OPC_DEFAULT_CWD || ''
-const MAX_STDOUT_CHARS = 1024 * 1024
-const MAX_STDERR_CHARS = 256 * 1024
-const BUNDLED_PLUGIN_NAMES = ['gstack-workflows']
+const {
+  BUNDLED_PLUGIN_NAMES,
+  CLI_VERSION_PROBE_TIMEOUT_MS,
+  DEFAULT_IDLE_TIMEOUT_MS,
+  DEFAULT_LOCAL_CWD,
+  DEFAULT_LONG_TOOL_IDLE_TIMEOUT_MS,
+  EXIT_CODE_IDLE_TIMEOUT,
+  EXIT_CODE_USER_STOP,
+  IDLE_CHECK_INTERVAL_MS,
+  IDLE_TIMEOUT_MAX_MS,
+  IDLE_TIMEOUT_MIN_MS,
+  LINGER_KILL_DELAY_MS,
+  LINGER_KILL_SOFT_KILL_MS,
+  LINGER_TERM_DELAY_MS,
+  LINGER_TERM_SOFT_KILL_MS,
+  MAX_STDERR_CHARS,
+  MAX_STDERR_EVENT_CHARS,
+  MAX_STDOUT_CHARS,
+  MAX_TOOL_IDLE_TIMEOUT_MS,
+  RUNTIME_ACTIVITY_MIN_INTERVAL_MS,
+} = require('./cliRunner.constants.cjs')
 
 function isSandboxCwd(value) {
   return typeof value === 'string' && (value.startsWith('/vercel/') || value.includes('/sandbox/'))
@@ -59,7 +71,9 @@ function profileMatchesSelection(profile, selected) {
 
 function runIdleTimeoutMs(env = process.env) {
   const value = Number(env.OPC_DESKTOP_IDLE_TIMEOUT_MS)
-  if (Number.isFinite(value) && value > 0) return Math.min(Math.max(value, 30000), 900000)
+  if (Number.isFinite(value) && value > 0) {
+    return Math.min(Math.max(value, IDLE_TIMEOUT_MIN_MS), IDLE_TIMEOUT_MAX_MS)
+  }
   return DEFAULT_IDLE_TIMEOUT_MS
 }
 
@@ -118,7 +132,7 @@ function appendBoundedText(current, next, maxChars) {
   return text.slice(-maxChars)
 }
 
-function tailText(value, maxChars = 4000) {
+function tailText(value, maxChars = MAX_STDERR_EVENT_CHARS) {
   const text = String(value || '').trim()
   if (text.length <= maxChars) return text
   return `...${text.slice(-(maxChars - 3))}`
@@ -139,7 +153,7 @@ function sanitizeArgs(args) {
   return sanitized
 }
 
-function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig, memoryStore, log, send }) {
+function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig, memoryStore, sessionStore, log, send }) {
   let activeRun = null
   const supervisor = createRuntimeSupervisor({ log })
 
@@ -157,23 +171,47 @@ function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig,
     const snapshot = supervisor.snapshot(run)
     const now = Date.now()
     const phaseChanged = snapshot.phase && snapshot.phase !== run.lastRuntimePhase
-    const stale = now - (run.lastRuntimeEmitAt || 0) >= 1000
+    const stale = now - (run.lastRuntimeEmitAt || 0) >= RUNTIME_ACTIVITY_MIN_INTERVAL_MS
     if (!change.force && !change.emit && !phaseChanged && !stale) return
     run.lastRuntimePhase = snapshot.phase
     run.lastRuntimeEmitAt = now
     sendRuntime(run, snapshot.phase)
   }
 
+  // Sprint 4 / H2: cancel pending linger timers so we don't keep refs to the
+  // run past `finishRun` and don't wake up useless timers on an already
+  // closed child.
+  function clearLingerTimers(run) {
+    if (!run || !run.lingerTimers) return
+    for (const handle of run.lingerTimers) clearTimeout(handle)
+    run.lingerTimers = null
+  }
+
   function finishRun(run, code, reason) {
     if (!run || run.finished) return null
     run.finished = true
     if (run.idleTimer) clearInterval(run.idleTimer)
+    clearLingerTimers(run)
     if (activeRun === run) activeRun = null
     const durationMs = Date.now() - run.startedAt
     const result = extractRunResult(run.stdout)
     const stdout = tailText(run.stdout)
     const stderr = tailText(run.stderr)
     memoryStore.recordRun(run, code, durationMs, result)
+    // Mark session status in sessionStore.
+    // Only user-initiated stops and idle timeouts are "interrupted" — a
+    // natural CLI failure (code != 0 with reason='close') is NOT resumable,
+    // because the underlying session state is unknown / corrupt. Marking it
+    // interrupted would make the banner propose "reprendre" a session whose
+    // resume would just re-fail.
+    if (sessionStore && run.sessionId) {
+      const wasInterrupted = reason === 'stopped' || reason === 'idle-timeout'
+      if (wasInterrupted) {
+        sessionStore.markInterrupted(run.sessionId)
+      } else {
+        sessionStore.markCompleted(run.sessionId)
+      }
+    }
     supervisor.finish(run, reason)
     sendRuntime(run, 'finished', { code, durationMs, reason })
     send('opc:run-end', { code, durationMs, reason, taskId: run.taskId, result, stdout, stderr })
@@ -216,7 +254,7 @@ function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig,
         taskId: run.taskId,
       })
       supervisor.stop(run, 'idle-timeout')
-      finishRun(run, 124, 'idle-timeout')
+      finishRun(run, EXIT_CODE_IDLE_TIMEOUT, 'idle-timeout')
       stopLingeringRun(run)
     }, IDLE_CHECK_INTERVAL_MS)
   }
@@ -231,13 +269,23 @@ function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig,
     log(`OPC idle watchdog extended to ${Math.round(nextTimeoutMs / 1000)}s for ${tool.name || 'tool'} ${tool.target || ''}`.trim())
   }
 
+  // Sprint 4 / H2: store timer handles on the run so `finishRun` can cancel
+  // them once the child actually exits, preventing leaked closures and
+  // useless wake-ups on already-dead children.
   function stopLingeringRun(run) {
-    setTimeout(() => {
-      if (run?.child?.exitCode === null && run?.child?.signalCode === null) supervisor.stop(run, 'linger-term', { softKillTimeoutMs: 1200 })
-    }, 1000)
-    setTimeout(() => {
-      if (run?.child?.exitCode === null && run?.child?.signalCode === null) supervisor.stop(run, 'linger-kill', { softKillTimeoutMs: 50 })
-    }, 2500)
+    if (!run || run.lingerTimers) return
+    run.lingerTimers = [
+      setTimeout(() => {
+        if (run?.child?.exitCode === null && run?.child?.signalCode === null) {
+          supervisor.stop(run, 'linger-term', { softKillTimeoutMs: LINGER_TERM_SOFT_KILL_MS })
+        }
+      }, LINGER_TERM_DELAY_MS),
+      setTimeout(() => {
+        if (run?.child?.exitCode === null && run?.child?.signalCode === null) {
+          supervisor.stop(run, 'linger-kill', { softKillTimeoutMs: LINGER_KILL_SOFT_KILL_MS })
+        }
+      }, LINGER_KILL_DELAY_MS),
+    ]
   }
 
   function handleCliEvent(event) {
@@ -249,6 +297,31 @@ function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig,
       const change = supervisor.recordEvent(run, compact || event)
       extendIdleWatchdogForTool(run, supervisor.snapshot(run).currentTool)
       sendRuntimeActivity(run, change)
+    }
+    // Capture session_id from Claude CLI init event
+    if (
+      sessionStore &&
+      run &&
+      !run.sessionId &&
+      event?.type === 'system' &&
+      event?.subtype === 'init' &&
+      event?.session_id
+    ) {
+      run.sessionId = String(event.session_id)
+      sessionStore.upsert({
+        id: run.sessionId,
+        taskId: run.taskId,
+        chatId: run.chatId,
+        cwd: run.cwd,
+        model: run.model,
+        status: 'running',
+        startedAt: run.startedAt,
+        updatedAt: Date.now(),
+        prompt: run.prompt,
+        maxTurns: run.maxTurns || null,
+        maxBudgetUsd: run.maxBudgetUsd || null,
+      })
+      log(`OPC session captured: ${run.sessionId} taskId=${run.taskId}`)
     }
     send('opc:event', compact)
     if (event?.type === 'result' && run) {
@@ -266,7 +339,7 @@ function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig,
       cwd: projectRoot(),
       encoding: 'utf8',
       env: cleanEnv(),
-      timeout: 5000,
+      timeout: CLI_VERSION_PROBE_TIMEOUT_MS,
     })
     return {
       ok: result.status === 0,
@@ -280,8 +353,24 @@ function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig,
 
   function run(payload) {
     if (activeRun) throw new Error('Une tâche est déjà en cours.')
-    const prompt = String(payload.prompt || '').trim()
-    if (!prompt) throw new Error('Prompt vide.')
+
+    // Auto-resolve sessionId for resume: if not provided but taskId has a known session
+    let resolvedSessionId = payload.sessionId || ''
+    let resolvedPrompt = String(payload.prompt || '').trim()
+
+    if (!resolvedSessionId && sessionStore && payload.taskId) {
+      const existingSession = sessionStore.findByTaskId(payload.taskId)
+      if (existingSession?.id && existingSession.status !== 'completed') {
+        resolvedSessionId = existingSession.id
+        log(`OPC auto-resume: session=${existingSession.id} taskId=${payload.taskId} status=${existingSession.status}`)
+        // If interrupted (not user-initiated resume), inject continuation prompt
+        if (!payload.prompt && existingSession.status === 'interrupted') {
+          resolvedPrompt = 'Continue from where you left off.'
+        }
+      }
+    }
+
+    if (!resolvedPrompt) throw new Error('Prompt vide.')
 
     const root = projectRoot()
     const cwd = resolveCwd(payload.cwd, () => root)
@@ -298,7 +387,7 @@ function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig,
     const args = [
       cliPath(),
       '-p',
-      prompt,
+      resolvedPrompt,
       '--verbose',
       '--output-format',
       'stream-json',
@@ -314,8 +403,11 @@ function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig,
     } else if (payload.permissionMode) {
       args.push('--permission-mode', String(payload.permissionMode))
     }
-    if (payload.sessionId) args.push('--resume', String(payload.sessionId))
+    if (resolvedSessionId) args.push('--resume', String(resolvedSessionId))
     if (payload.maxTurns) args.push('--max-turns', String(payload.maxTurns))
+    if (payload.maxBudgetUsd && Number(payload.maxBudgetUsd) > 0) {
+      args.push('--max-budget-tokens', String(Math.round(Number(payload.maxBudgetUsd) * 1000000)))
+    }
     if (payload.settingsPath) args.push('--settings', String(payload.settingsPath))
     if (Array.isArray(payload.allowedTools) && payload.allowedTools.length) {
       args.push('--allowedTools', payload.allowedTools.join(','))
@@ -352,13 +444,17 @@ function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig,
       startedAt: Date.now(),
       lastActivityAt: Date.now(),
       idleTimer: null,
+      lingerTimers: null,
       taskId: String(payload.taskId || ''),
       assistantId: String(payload.assistantId || ''),
       chatId: String(payload.chatId || ''),
-      prompt: String(payload.displayPrompt || prompt),
+      prompt: String(payload.displayPrompt || resolvedPrompt),
       cwd,
       model,
       memoryEnabled,
+      sessionId: resolvedSessionId || null,
+      maxTurns: payload.maxTurns || null,
+      maxBudgetUsd: payload.maxBudgetUsd || null,
       commandIntent: payload.commandIntent || null,
       projectRuntimeContext: payload.projectRuntimeContext || null,
       processGroup: process.platform !== 'win32',
@@ -391,7 +487,10 @@ function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig,
       markActivity()
       const text = String(chunk)
       if (activeRun) activeRun.stdout = appendBoundedText(activeRun.stdout, text, MAX_STDOUT_CHARS)
-      stdoutBuffer += text
+      // Sprint 4 / H1: bound the partial-line buffer too. A runaway CLI
+      // emitting a single very long line without a newline would otherwise
+      // accumulate the entire payload in memory until the line completes.
+      stdoutBuffer = appendBoundedText(stdoutBuffer, text, MAX_STDOUT_CHARS)
       const lines = stdoutBuffer.split(/\r?\n/)
       stdoutBuffer = lines.pop() || ''
       for (const line of lines) {
@@ -410,7 +509,13 @@ function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig,
       if (activeRun) activeRun.stderr = appendBoundedText(activeRun.stderr, text, MAX_STDERR_CHARS)
       for (const line of text.split(/\r?\n/)) {
         if (!line.trim()) continue
-        const event = { type: 'stderr', text: line, taskId: activeRun?.taskId || '' }
+        const trimmed = tailText(line, MAX_STDERR_EVENT_CHARS)
+        const event = {
+          type: 'stderr',
+          text: trimmed,
+          truncated: trimmed.length !== line.trim().length,
+          taskId: activeRun?.taskId || '',
+        }
         if (activeRun) sendRuntimeActivity(activeRun, supervisor.recordEvent(activeRun, event))
         send('opc:event', event)
       }
@@ -432,6 +537,12 @@ function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig,
       }
       const finishedRun = activeRun
       const finished = finishRun(finishedRun, code, 'close')
+      // Defensive cleanup: `handleCliEvent` schedules linger timers in the
+      // result path BEFORE `finishRun` marks the run finished. `finishRun`
+      // short-circuits on subsequent calls (the `finished` guard), so any
+      // timer scheduled during the result path survives until natural wake.
+      // Clearing here releases the closures as soon as the child exits.
+      if (finishedRun) clearLingerTimers(finishedRun)
       log(`OPC CLI exited code=${code} durationMs=${finished?.durationMs || 0}`)
     })
   }
@@ -441,7 +552,7 @@ function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig,
     const run = activeRun
     send('opc:event', { type: 'stopped', message: 'Tâche arrêtée par l’utilisateur.', taskId: run.taskId })
     supervisor.stop(run, 'stopped')
-    finishRun(run, 130, 'stopped')
+    finishRun(run, EXIT_CODE_USER_STOP, 'stopped')
     stopLingeringRun(run)
     return true
   }
@@ -491,11 +602,36 @@ function createCliRunner({ projectRoot, cliPath, providerBridge, providerConfig,
 }
 
 module.exports = {
+  // Refactor LOW: re-export the named constants via this module so consumers
+  // can `require('./cliRunner.cjs').CLI_RUNNER_CONSTANTS` without depending on
+  // the dedicated constants module.
+  CLI_RUNNER_CONSTANTS: Object.freeze({
+    BUNDLED_PLUGIN_NAMES,
+    CLI_VERSION_PROBE_TIMEOUT_MS,
+    DEFAULT_IDLE_TIMEOUT_MS,
+    DEFAULT_LOCAL_CWD,
+    DEFAULT_LONG_TOOL_IDLE_TIMEOUT_MS,
+    EXIT_CODE_IDLE_TIMEOUT,
+    EXIT_CODE_USER_STOP,
+    IDLE_CHECK_INTERVAL_MS,
+    IDLE_TIMEOUT_MAX_MS,
+    IDLE_TIMEOUT_MIN_MS,
+    LINGER_KILL_DELAY_MS,
+    LINGER_KILL_SOFT_KILL_MS,
+    LINGER_TERM_DELAY_MS,
+    LINGER_TERM_SOFT_KILL_MS,
+    MAX_STDERR_CHARS,
+    MAX_STDERR_EVENT_CHARS,
+    MAX_STDOUT_CHARS,
+    MAX_TOOL_IDLE_TIMEOUT_MS,
+    RUNTIME_ACTIVITY_MIN_INTERVAL_MS,
+  }),
   bundledPluginDirs,
   classifyLongRunningTool,
   commandLooksLongRunning,
   createCliRunner,
   resolveCwd,
   stripPathShellQuotes,
+  tailText,
   toolIdleTimeoutMs,
 }

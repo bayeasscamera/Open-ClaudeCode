@@ -8,3 +8,8 @@
 @import "./message.css";
 @import "./settings.css";
 @import "./responsive.css";
+
+.hidden {
+  display: none !important;
+}
+

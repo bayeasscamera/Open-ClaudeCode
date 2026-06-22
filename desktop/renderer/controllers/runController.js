@@ -632,6 +632,8 @@
         return
       }
       const planned = requestPlanner.plan({ prompt: planningPrompt, chat })
+      const maxTurnsVal = typeof document !== 'undefined' ? document.querySelector('#maxTurnsInput')?.value : ''
+      const maxBudgetVal = typeof document !== 'undefined' ? document.querySelector('#maxBudgetInput')?.value : ''
       const {
         effectiveCwd,
         commandIntent,
@@ -776,7 +778,8 @@
           permissionDecision: permissions,
           rescueMode,
           actionPrompt: planned.actionPrompt,
-          maxTurns: '',
+          maxTurns: maxTurnsVal ? Number(maxTurnsVal) : '',
+          maxBudgetUsd: maxBudgetVal ? Number(maxBudgetVal) : '',
         },
       })
       enqueueAgentTask({

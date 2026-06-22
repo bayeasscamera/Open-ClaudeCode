@@ -23,6 +23,8 @@ const { PRELOAD_EVENT_METHODS, PRELOAD_INVOKE_METHODS } = require('./ipcContract
 const { migrateLegacyProviderConfig, redactLegacyProviderSecrets } = require('./userDataMigration.cjs')
 const { createMainWindow } = require('./windowManager.cjs')
 const { attachVisualQa } = require('./e2eVisualQa.cjs')
+const { createSessionStore } = require('./sessionStore.cjs')
+const { createSendChannel } = require('./sendChannel.cjs')
 
 const APP_NAME = 'OPC'
 const PROVIDER_WAIT_STATUS_INTERVAL_MS = 10000
@@ -68,10 +70,12 @@ if (sandboxDecision.warning) {
   log(sandboxDecision.warning)
 }
 
-function send(channel, payload) {
-  if (!mainWindow || mainWindow.isDestroyed()) return
-  mainWindow.webContents.send(channel, payload)
-}
+// Sprint 4 / M1: `send` is extracted into sendChannel.cjs so it can be
+// unit-tested without spinning up the full Electron main process. The
+// accessor is bound lazily so `mainWindow` can be null while the window is
+// being created, and re-bound (via the closure) once `createWindow()`
+// assigns it.
+const send = createSendChannel({ getMainWindow: () => mainWindow, log })
 
 function projectRoot() {
   if (app.isPackaged) return path.join(process.resourcesPath, 'opc')
@@ -100,6 +104,10 @@ function memoryDir() {
 
 function statePath() {
   return path.join(app.getPath('userData'), 'state', 'desktop-state.json')
+}
+
+function sessionStorePath() {
+  return path.join(app.getPath('userData'), 'state', 'cli-sessions.sqlite')
 }
 
 const selectionController = createSelectionController({ clipboard, log, getMainWindow: () => mainWindow })
@@ -139,12 +147,14 @@ const providerClient = createNvidiaClient({ providerConfig: providerConfigStore 
 const providerChecker = createProviderChecker({ providerConfigStore, providerClient })
 const providerModelDiscovery = createProviderModelDiscovery({ providerConfigStore })
 const promptRefiner = createPromptRefiner({ providerConfigStore, providerClient })
+const sessionStore = createSessionStore({ dbPath: sessionStorePath })
 const cliRunner = createCliRunner({
   projectRoot,
   cliPath,
   providerBridge: providerBridgeService,
   providerConfig: providerConfigStore,
   memoryStore,
+  sessionStore,
   log,
   send,
 })
@@ -218,9 +228,36 @@ function createWindow() {
     rendererPath: path.join(__dirname, '..', 'renderer', 'index.html'),
     preloadContract: { PRELOAD_EVENT_METHODS, PRELOAD_INVOKE_METHODS },
   })
+  // Drop the mainWindow reference once the renderer is gone so any stray
+  // `send(channel, payload)` from background timers or supervisors becomes a
+  // no-op instead of dereferencing a destroyed window.
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
   selectionController.attachToWindow(mainWindow, Menu)
   if (e2eVisual) attachVisualQa(mainWindow, app)
   else if (e2eSmoke) attachSmokeTest(mainWindow)
+
+  // After renderer is ready, notify about incomplete sessions (resume support)
+  mainWindow.webContents.once('did-finish-load', () => {
+    try {
+      // Mark sessions that were 'running' at last shutdown as interrupted
+      const orphaned = sessionStore.markOrphanedAsInterrupted()
+      if (orphaned.count > 0) {
+        log(`OPC session recovery: marked ${orphaned.count} orphaned session(s) as interrupted`)
+      }
+      // Prune sessions older than 30 days
+      sessionStore.pruneOld({ maxAgeDays: 30 })
+      // Propose resume for recent incomplete sessions
+      const incomplete = sessionStore.findIncomplete({ limit: 3 })
+      if (incomplete.length > 0) {
+        log(`OPC resume: found ${incomplete.length} resumable session(s)`)
+        send('opc:resume-available', { sessions: incomplete })
+      }
+    } catch (error) {
+      log(`OPC session boot check failed: ${error.message}`)
+    }
+  })
 }
 
 function attachSmokeTest(window) {
@@ -334,6 +371,7 @@ const ipc = registerIpcHandlers({
   providerConfigStore,
   memoryStore,
   desktopStateStore,
+  sessionStore,
   providerChecker,
   providerModelDiscovery,
   doctor,

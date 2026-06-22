@@ -566,7 +566,56 @@ els.project.addEventListener('change', () => {
   renderer.render()
 })
 
-opcClient.onRunStart(payload => runController.onRunStart(payload))
+
+    // Instanciation de la bannière de session
+    const resumeBanner = window.createSessionBanner({
+      bannerElement: document.querySelector('#resumeBanner'),
+      onResume: (session) => {
+        // Remplir le prompt, cwd, model et lancer la reprise
+        if (session.cwd) document.querySelector('#cwdInput').value = session.cwd
+        if (session.model) {
+          document.querySelector('#modelInput').value = session.model
+          if (document.querySelector('#composerModelInput')) {
+            document.querySelector('#composerModelInput').value = session.model
+          }
+        }
+        // Force l'injection de sessionId pour ce run
+        const activeChat = chatController.activeChat() || chatController.createChat()
+        // On envoie le prompt vide ou 'Continue' pour reprendre
+        setPrompt('')
+        // On appelle sendPrompt directement mais avec sessionId résolu
+        opc.run({
+          taskId: session.taskId,
+          chatId: activeChat.id,
+          prompt: 'Continue from where you left off.',
+          cwd: session.cwd,
+          model: session.model,
+          sessionId: session.id,
+          maxTurns: document.querySelector('#maxTurnsInput')?.value || session.maxTurns,
+          maxBudgetUsd: document.querySelector('#maxBudgetInput')?.value || session.maxBudgetUsd
+        }).catch(err => {
+          console.error('Erreur reprise session CLI:', err)
+        })
+      },
+      onDismiss: (session) => {
+        opc.sessionMarkDone({ id: session.id })
+      }
+    })
+
+    window.opc.onResumeAvailable?.(({ sessions }) => {
+      resumeBanner.show(sessions)
+    })
+
+    // Loop-engine human-in-the-loop gate (ReAct ask-human path).
+    const humanGateBanner = window.createConfirmationBanner({
+      bannerElement: document.querySelector('#humanGateBanner'),
+      invoke: (id, decision) => window.opc.humanGateAsk?.({ id, decision }),
+    })
+    window.opc.onHumanGatePrompt?.((prompt) => {
+      humanGateBanner.show(prompt)
+    })
+
+    opcClient.onRunStart(payload => runController.onRunStart(payload))
 opcClient.onEvent(event => runController.onCliEvent(event))
 opcClient.onRunEnd(payload => runController.onRunEnd(payload))
 opcClient.onRuntime?.(payload => {

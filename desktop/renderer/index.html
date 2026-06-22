@@ -93,6 +93,14 @@
                 <span>Active</span>
               </label>
             </div>
+            <div class="field maxTurnsField">
+              <label for="maxTurnsInput">Turns max</label>
+              <input id="maxTurnsInput" type="number" min="1" max="500" step="1" placeholder="—" title="Nombre de tours maximum (--max-turns)" />
+            </div>
+            <div class="field maxBudgetField">
+              <label for="maxBudgetInput">Budget $</label>
+              <input id="maxBudgetInput" type="number" min="0" step="0.5" placeholder="—" title="Budget maximum en USD" />
+            </div>
           </div>
           <button id="providerCheck" class="iconButton" title="Tester le modèle sélectionné">✓</button>
           <button id="thinkToggle" class="thinkButton" type="button" aria-pressed="false" title="Activer Think">Think</button>
@@ -100,6 +108,9 @@
           <button id="settingsToggle" class="iconButton" title="Réglages">⚙</button>
           <button id="logsToggle" class="iconButton" title="Logs">≡</button>
         </header>
+
+        <div id="resumeBanner" class="resumeBanner hidden" role="status" aria-live="polite"></div>
+        <div id="humanGateBanner" class="humanGateBanner hidden" role="status" aria-live="polite"></div>
 
         <section id="messages" class="messages" role="log" aria-live="polite" aria-label="Conversation OPC"></section>
 
@@ -640,6 +651,8 @@
     <script src="./controllers/settingsController.js"></script>
     <script src="./controllers/renderController.js"></script>
     <script src="./services/reportSelection.js"></script>
+    <script src="./services/sessionBanner.js"></script>
+    <script src="./services/confirmationBanner.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
